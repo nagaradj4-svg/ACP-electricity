@@ -1,0 +1,1843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Ariankuppam Commune Panchayat — Electricity Connection &amp; Demand Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" id="leafletCss" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';">
+<style>
+:root{
+  --bg:#F1F4F9;
+  --surface:#FFFFFF;
+  --surface-2:#E9EDF5;
+  --ink:#152238;
+  --ink-soft:#546077;
+  --ink-faint:#8892A6;
+  --primary:#152238;
+  --primary-light:#223460;
+  --accent:#F2A93B;
+  --accent-deep:#C97F12;
+  --teal:#158C79;
+  --red:#D14343;
+  --border:#DCE2EC;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(21,34,56,.06),0 4px 14px rgba(21,34,56,.05);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Inter',system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+h1,h2,h3,h4{font-family:'Space Grotesk',system-ui,sans-serif;margin:0;letter-spacing:-0.01em;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+button{font-family:inherit;}
+a{color:inherit;}
+::selection{background:var(--accent);color:var(--primary);}
+
+/* ---------- Layout shell ---------- */
+#app{display:flex;min-height:100vh;}
+#sidebar{
+  width:230px;flex-shrink:0;background:var(--primary);color:#EEF2FA;
+  display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0;z-index:40;
+  transform:translateX(0);transition:transform .25s ease;
+}
+#sidebar .brand{
+  padding:20px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08);
+}
+#sidebar .brand .bolt{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:8px;background:var(--accent);color:var(--primary);
+  font-family:'Space Grotesk';font-weight:700;font-size:18px;margin-bottom:10px;
+}
+#sidebar .brand h1{font-size:15px;line-height:1.35;color:#fff;}
+#sidebar .brand .sub{font-size:11px;color:#A9B4CC;margin-top:4px;letter-spacing:.03em;text-transform:uppercase;}
+nav.navlist{padding:12px 10px;flex:1;overflow-y:auto;}
+nav.navlist button{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:none;border:none;color:#C7D0E6;padding:10px 12px;border-radius:8px;
+  font-size:13.5px;font-weight:500;cursor:pointer;margin-bottom:2px;transition:background .15s, color .15s;
+}
+nav.navlist button .ic{width:18px;text-align:center;font-size:15px;}
+nav.navlist button:hover{background:rgba(255,255,255,.06);color:#fff;}
+nav.navlist button.active{background:var(--accent);color:var(--primary);font-weight:700;}
+#sidebar .foot{padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);font-size:10.5px;color:#8695B5;}
+
+#main{margin-left:230px;flex:1;min-width:0;display:flex;flex-direction:column;}
+#topbar{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:12px 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;
+}
+#hamburger{display:none;background:none;border:1px solid var(--border);border-radius:8px;width:36px;height:36px;cursor:pointer;font-size:16px;}
+#topbar .title{font-size:16px;font-weight:700;font-family:'Space Grotesk';flex:1;}
+#topbar .status-pill{
+  font-size:11px;padding:4px 10px;border-radius:20px;background:var(--surface-2);color:var(--ink-soft);
+  display:flex;align-items:center;gap:6px;
+}
+#topbar .status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);}
+#content{padding:20px 22px 60px;flex:1;}
+
+.view{display:none;}
+.view.active{display:block;animation:fadein .2s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+/* ---------- Reusable ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+.section-head h2{font-size:20px;}
+.section-head p{margin:2px 0 0;color:var(--ink-soft);font-size:13px;}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);color:var(--ink);padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;
+  transition:all .12s;
+}
+.btn:hover{border-color:var(--ink-faint);}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary);}
+.btn-primary:hover{background:var(--primary-light);}
+.btn-accent{background:var(--accent);color:var(--primary);border-color:var(--accent);}
+.btn-accent:hover{background:var(--accent-deep);color:#fff;}
+.btn-danger{color:var(--red);border-color:#F3D3D3;background:#FDF4F4;}
+.btn-danger:hover{background:var(--red);color:#fff;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+.grid{display:grid;gap:14px;}
+.stat-cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:18px;}
+.stat-card{
+  background:var(--primary);border-radius:12px;padding:16px 18px;color:#fff;position:relative;overflow:hidden;
+  border:1px solid var(--primary);
+}
+.stat-card::before{
+  content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(115deg,rgba(255,255,255,.035) 0 2px,transparent 2px 10px);
+}
+.stat-card .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#A9B4CC;position:relative;}
+.stat-card .val{font-family:'IBM Plex Mono';font-size:26px;font-weight:600;color:var(--accent);margin-top:6px;position:relative;}
+.stat-card .val small{font-size:13px;color:#C7D0E6;font-weight:500;margin-left:3px;}
+.stat-card.alert .val{color:#FF8A8A;}
+.stat-card.good .val{color:#6FE0C6;}
+
+.charts-grid{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-bottom:18px;}
+.chart-box{padding:16px 18px;}
+.chart-box h3{font-size:14px;margin-bottom:12px;}
+.chart-box canvas{max-height:260px;}
+
+.filters-bar{display:flex;flex-wrap:wrap;gap:8px;padding:14px;margin-bottom:14px;}
+.filters-bar select,.filters-bar input{
+  padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface);color:var(--ink);
+  min-width:130px;
+}
+.filters-bar input[type=search]{flex:1;min-width:180px;}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead th{
+  text-align:left;padding:10px 12px;background:var(--surface-2);color:var(--ink-soft);
+  font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;
+}
+tbody td{padding:10px 12px;border-top:1px solid var(--border);vertical-align:top;}
+tbody tr:hover{background:#FAFBFD;}
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);}
+.table-wrap table{min-width:900px;}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge.paid{background:#E2F5EF;color:var(--teal);}
+.badge.unpaid{background:#FBE7E7;color:var(--red);}
+.badge.partial{background:#FEF2DE;color:var(--accent-deep);}
+.row-actions{display:flex;gap:6px;}
+.icon-btn{background:none;border:none;cursor:pointer;font-size:14px;color:var(--ink-soft);padding:4px 6px;border-radius:6px;}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink);}
+
+.empty{padding:40px 20px;text-align:center;color:var(--ink-faint);}
+.empty .big{font-size:32px;margin-bottom:8px;}
+
+/* Modal */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(21,34,56,.5);display:none;align-items:flex-start;justify-content:center;
+  z-index:100;padding:30px 14px;overflow-y:auto;
+}
+.modal-overlay.active{display:flex;}
+.modal{background:var(--surface);border-radius:14px;max-width:640px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.modal-head h3{font-size:16px;}
+.modal-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink-soft);}
+.modal-body{padding:18px 20px;max-height:70vh;overflow-y:auto;}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-grid .full{grid-column:1/-1;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
+.field input,.field select,.field textarea{
+  width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:#FCFDFE;color:var(--ink);
+}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent);}
+.field textarea{resize:vertical;min-height:60px;}
+.field .row-inline{display:flex;gap:8px;}
+.field .row-inline select{flex:1;min-width:0;}
+.field .row-inline .btn{flex-shrink:0;}
+.field small{color:var(--ink-faint);font-size:11px;}
+
+.tag-manage-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:200px;overflow-y:auto;}
+.tag-manage-row{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface-2);border-radius:7px;}
+.tag-manage-row input{flex:1;border:none;background:transparent;font-size:13px;padding:2px 4px;}
+.tag-manage-row input:focus{outline:1px solid var(--accent);border-radius:4px;}
+
+@media (max-width:880px){
+  #sidebar{transform:translateX(-100%);box-shadow:0 0 40px rgba(0,0,0,.3);}
+  #sidebar.open{transform:translateX(0);}
+  #main{margin-left:0;}
+  #hamburger{display:block;}
+  .form-grid{grid-template-columns:1fr;}
+  .table-wrap table{min-width:760px;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important;}
+}
+#toast-wrap{position:fixed;bottom:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+.toast{background:var(--primary);color:#fff;padding:11px 16px;border-radius:9px;font-size:13px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:8px;animation:toastin .2s ease;max-width:320px;}
+.toast.err{background:var(--red);}
+.toast.ok{background:var(--teal);}
+@keyframes toastin{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+.print-only{display:none;}
+@media print{
+  #sidebar,#topbar,.no-print{display:none !important;}
+  #main{margin-left:0;}
+  #content{padding:0;}
+  .print-only{display:block;}
+  body{background:#fff;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="bolt">⚡</div>
+      <h1>Ariankuppam Commune Panchayat</h1>
+      <div class="sub">Electricity Connection Monitor</div>
+    </div>
+    <nav class="navlist" id="navlist">
+      <button data-view="dashboard" class="active"><span class="ic">▦</span> Dashboard</button>
+      <button data-view="connections"><span class="ic">🗂</span> Connections</button>
+      <button data-view="demand"><span class="ic">🧾</span> Monthly Demand</button>
+      <button data-view="map"><span class="ic">📍</span> Geo Map</button>
+      <button data-view="reports"><span class="ic">📊</span> Reports &amp; Export</button>
+      <button data-view="settings"><span class="ic">⚙</span> Settings &amp; Sync</button>
+    </nav>
+    <div class="foot">Offline-first · Data stored on this device<br>v1.0</div>
+  </aside>
+
+  <div id="main">
+    <div id="topbar">
+      <button id="hamburger">☰</button>
+      <div class="title" id="pageTitle">Dashboard</div>
+      <div class="status-pill"><span class="dot"></span> <span id="storageStatus">Local storage ready</span></div>
+    </div>
+    <div id="content">
+
+      <!-- DASHBOARD -->
+      <section class="view active" id="view-dashboard">
+        <div class="section-head">
+          <div><h2>Dashboard</h2><p>Overview of electricity service connections and demand status</p></div>
+          <button class="btn btn-accent" data-action="new-connection">+ New Connection</button>
+        </div>
+        <div class="grid stat-cards" id="statCards"></div>
+        <div class="grid charts-grid">
+          <div class="card chart-box"><h3>Connections by Tariff Type</h3><canvas id="chartTariff"></canvas></div>
+          <div class="card chart-box"><h3>Connections by Building Type</h3><canvas id="chartBuilding"></canvas></div>
+          <div class="card chart-box"><h3>Connections by Village</h3><canvas id="chartVillage"></canvas></div>
+          <div class="card chart-box"><h3>Demand Trend (last 12 months)</h3><canvas id="chartTrend"></canvas></div>
+        </div>
+      </section>
+
+      <!-- CONNECTIONS -->
+      <section class="view" id="view-connections">
+        <div class="section-head">
+          <div><h2>Service Connections</h2><p>Register and manage electricity service connections</p></div>
+          <button class="btn btn-accent" data-action="new-connection">+ New Connection</button>
+        </div>
+        <div class="card filters-bar" id="connFilters"></div>
+        <div class="table-wrap card">
+          <table id="connTable">
+            <thead><tr>
+              <th>Consumer No</th><th>Consumer Name</th><th>Division</th><th>Constituency</th><th>Village</th>
+              <th>Building Type</th><th>Tariff</th><th>Sanctioned Load</th><th>Geo</th><th></th>
+            </tr></thead>
+            <tbody id="connTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- DEMAND -->
+      <section class="view" id="view-demand">
+        <div class="section-head">
+          <div><h2>Monthly Demand</h2><p>Record and update the electricity demand raised each month</p></div>
+          <button class="btn btn-accent" data-action="new-demand">+ Add Demand Entry</button>
+        </div>
+        <div class="card filters-bar" id="demandFilters"></div>
+        <div class="table-wrap card">
+          <table id="demandTable">
+            <thead><tr>
+              <th>Consumer No</th><th>Consumer Name</th><th>Month</th><th>Units</th><th>Demand Amount (₹)</th>
+              <th>Status</th><th>Paid Amount</th><th>Due Date</th><th></th>
+            </tr></thead>
+            <tbody id="demandTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MAP -->
+      <section class="view" id="view-map">
+        <div class="section-head">
+          <div><h2>Geo-tagged Assets</h2><p>Map of service connections tagged with GPS location</p></div>
+        </div>
+        <div class="card" style="padding:6px;">
+          <div id="leafletMap" style="height:520px;border-radius:8px;"></div>
+        </div>
+      </section>
+
+      <!-- REPORTS -->
+      <section class="view" id="view-reports">
+        <div class="section-head">
+          <div><h2>Reports &amp; Export</h2><p>Generate filtered reports and export to Excel / PDF</p></div>
+        </div>
+        <div class="card filters-bar" id="reportFilters"></div>
+        <div class="card" style="padding:16px 18px;margin-bottom:16px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-primary" data-action="export-excel">⬇ Export Excel</button>
+            <button class="btn btn-primary" data-action="export-csv">⬇ Export CSV</button>
+            <button class="btn btn-primary" data-action="export-pdf">⬇ Export PDF Report</button>
+            <button class="btn btn-primary" data-action="export-kml">⬇ Export KML (Geo)</button>
+            <button class="btn" data-action="print-report">🖨 Print</button>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+              <button class="btn btn-accent" data-action="import-excel">⬆ Import Excel / CSV</button>
+              <input type="file" id="importExcelInput" accept=".xlsx,.xls,.csv" style="display:none;">
+              <small style="color:var(--ink-soft);">Matches rows by <strong>Consumer No</strong> — existing connections are updated, new ones are added. Works the same way on a phone or a computer: it opens your device's file picker.</small>
+            </div>
+            <div id="importExcelStatus" style="margin-top:8px;font-size:12px;color:var(--ink-soft);"></div>
+          </div>
+        </div>
+        <div class="card" style="padding:16px 18px;">
+          <h3 style="font-size:14px;margin-bottom:10px;">Report Preview — <span id="reportSummaryLine"></span></h3>
+          <div class="table-wrap">
+            <table id="reportTable">
+              <thead><tr>
+                <th>Consumer No</th><th>Name</th><th>Division</th><th>Constituency</th><th>Village</th>
+                <th>Building</th><th>Tariff</th><th>Load</th><th>Last Demand</th><th>Last Status</th>
+              </tr></thead>
+              <tbody id="reportTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" id="view-settings">
+        <div class="section-head">
+          <div><h2>Settings &amp; Sync</h2><p>Manage dropdown lists, panchayat defaults, and backup/sync options</p></div>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+          <div class="card" style="padding:16px 18px;">
+            <h3 style="font-size:14px;margin-bottom:10px;">🏢 Building Types</h3>
+            <div class="field"><input type="text" id="newBuildingType" placeholder="Add new building type…"></div>
+            <button class="btn btn-sm" style="margin-top:8px;" data-action="add-building-type">+ Add</button>
+            <div class="tag-manage-list" id="buildingTypeList"></div>
+          </div>
+          <div class="card" style="padding:16px 18px;">
+            <h3 style="font-size:14px;margin-bottom:10px;">💡 Tariff Types</h3>
+            <div class="field"><input type="text" id="newTariffType" placeholder="Add new tariff type…"></div>
+            <button class="btn btn-sm" style="margin-top:8px;" data-action="add-tariff-type">+ Add</button>
+            <div class="tag-manage-list" id="tariffTypeList"></div>
+          </div>
+          <div class="card" style="padding:16px 18px;">
+            <h3 style="font-size:14px;margin-bottom:10px;">🏛 Constituencies</h3>
+            <div class="field"><input type="text" id="newConstituency" placeholder="Add new constituency…"></div>
+            <button class="btn btn-sm" style="margin-top:8px;" data-action="add-constituency">+ Add</button>
+            <div class="tag-manage-list" id="constituencyList"></div>
+          </div>
+          <div class="card" style="padding:16px 18px;">
+            <h3 style="font-size:14px;margin-bottom:10px;">🏘 Villages</h3>
+            <div class="field"><input type="text" id="newVillage" placeholder="Add new village…"></div>
+            <button class="btn btn-sm" style="margin-top:8px;" data-action="add-village">+ Add</button>
+            <div class="tag-manage-list" id="villageList"></div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:16px 18px;margin-bottom:16px;">
+          <h3 style="font-size:14px;margin-bottom:10px;">🏛 Panchayat Default</h3>
+          <div class="form-grid">
+            <div class="field"><label>Default Name of Commune Panchayat</label><input type="text" id="settingPanchayatName" placeholder="Ariankuppam Commune Panchayat"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" style="margin-top:10px;" data-action="save-settings">Save</button>
+        </div>
+
+        <div class="card" style="padding:16px 18px;margin-bottom:16px;">
+          <h3 style="font-size:14px;margin-bottom:6px;">🐙 GitHub Backup / Restore</h3>
+          <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Back up all data as JSON to a GitHub repository file, and restore it on any device. Requires a personal access token with repo write access — kept only in this browser's local storage.</p>
+          <div class="form-grid">
+            <div class="field"><label>GitHub Personal Access Token</label><input type="password" id="ghToken" placeholder="ghp_…"></div>
+            <div class="field"><label>Repository (owner/repo)</label><input type="text" id="ghRepo" placeholder="username/ariankuppam-data"></div>
+            <div class="field"><label>File path</label><input type="text" id="ghPath" placeholder="data/electricity-data.json"></div>
+            <div class="field"><label>Branch</label><input type="text" id="ghBranch" placeholder="main"></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" data-action="save-github-settings">Save Settings</button>
+            <button class="btn btn-accent btn-sm" data-action="github-backup">⬆ Backup Now</button>
+            <button class="btn btn-sm" data-action="github-restore">⬇ Restore from GitHub</button>
+          </div>
+          <div id="ghStatus" style="margin-top:8px;font-size:12px;color:var(--ink-soft);"></div>
+        </div>
+
+        <div class="card" style="padding:16px 18px;margin-bottom:16px;">
+          <h3 style="font-size:14px;margin-bottom:6px;">📗 Google Sheets Sync (via Apps Script)</h3>
+          <p style="font-size:12px;color:var(--ink-soft);margin:0 0 12px;">Paste the URL of a deployed Google Apps Script Web App to push data to a connected Google Sheet. See instructions below.</p>
+          <div class="field"><label>Apps Script Web App URL</label><input type="text" id="gsheetUrl" placeholder="https://script.google.com/macros/s/…/exec"></div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" data-action="save-gsheet-settings">Save URL</button>
+            <button class="btn btn-accent btn-sm" data-action="gsheet-sync">⬆ Sync to Google Sheet</button>
+          </div>
+          <div id="gsheetStatus" style="margin-top:8px;font-size:12px;color:var(--ink-soft);"></div>
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer;font-size:12px;color:var(--ink-soft);">How to set up the Apps Script Web App</summary>
+            <ol style="font-size:12px;color:var(--ink-soft);padding-left:18px;line-height:1.6;">
+              <li>Open your Google Sheet → Extensions → Apps Script.</li>
+              <li>Paste a script that reads <span class="mono">e.postData.contents</span> as JSON and writes rows to sheets named "Connections" and "Demands".</li>
+              <li>Deploy → New deployment → Web app → Execute as "Me" → Who has access "Anyone".</li>
+              <li>Copy the deployment URL into the field above.</li>
+            </ol>
+          </details>
+        </div>
+
+        <div class="card" style="padding:16px 18px;">
+          <h3 style="font-size:14px;margin-bottom:10px;">💾 Local Data</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-sm" data-action="export-json">⬇ Export All Data (JSON)</button>
+            <button class="btn btn-sm" data-action="import-json">⬆ Import Data (JSON)</button>
+            <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+            <button class="btn btn-danger btn-sm" data-action="wipe-data">🗑 Erase All Local Data</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- Connection Modal -->
+<div class="modal-overlay" id="connModalOverlay">
+  <div class="modal">
+    <div class="modal-head"><h3 id="connModalTitle">New Connection</h3><button class="modal-close" data-close>✕</button></div>
+    <div class="modal-body">
+      <form id="connForm" class="form-grid">
+        <input type="hidden" id="conn_id">
+        <div class="field"><label>Electricity Revenue Division *</label><input type="text" id="conn_division" required placeholder="e.g. Puducherry Electricity Division"></div>
+        <div class="field"><label>Name of Commune Panchayat *</label><input type="text" id="conn_panchayat" required></div>
+        <div class="field"><label>Electricity Consumer No *</label><input type="text" id="conn_consumerNo" required></div>
+        <div class="field"><label>Constituency *</label>
+          <div class="row-inline">
+            <select id="conn_constituency" required></select>
+            <button type="button" class="btn btn-sm" data-action="quick-add-constituency" title="Add new constituency">+</button>
+          </div>
+        </div>
+        <div class="field"><label>Village *</label>
+          <div class="row-inline">
+            <select id="conn_village" required></select>
+            <button type="button" class="btn btn-sm" data-action="quick-add-village" title="Add new village">+</button>
+          </div>
+        </div>
+        <div class="field"><label>Sanctioned Load (kW/HP) *</label><input type="number" step="0.01" id="conn_load" required></div>
+        <div class="field"><label>Name of Consumer *</label><input type="text" id="conn_name" required></div>
+        <div class="field full"><label>Address of Consumer *</label><textarea id="conn_address" required></textarea></div>
+        <div class="field"><label>Type of Building *</label><select id="conn_buildingType" required></select></div>
+        <div class="field"><label>Type of Tariff *</label><select id="conn_tariffType" required></select></div>
+        <div class="field full">
+          <label>Geo-tagging of Asset</label>
+          <div class="row-inline">
+            <input type="text" id="conn_lat" placeholder="Latitude" readonly>
+            <input type="text" id="conn_lng" placeholder="Longitude" readonly>
+            <button type="button" class="btn btn-sm" data-action="capture-geo">📍 Capture GPS</button>
+          </div>
+          <small id="geoStatus"></small>
+        </div>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" data-action="save-connection">Save Connection</button>
+    </div>
+  </div>
+</div>
+
+<!-- Demand Modal -->
+<div class="modal-overlay" id="demandModalOverlay">
+  <div class="modal">
+    <div class="modal-head"><h3 id="demandModalTitle">Add Demand Entry</h3><button class="modal-close" data-close>✕</button></div>
+    <div class="modal-body">
+      <form id="demandForm" class="form-grid">
+        <input type="hidden" id="dmd_id">
+        <div class="field full"><label>Connection *</label><select id="dmd_connectionId" required></select></div>
+        <div class="field"><label>Month *</label>
+          <select id="dmd_month" required>
+            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+        </div>
+        <div class="field"><label>Year *</label><input type="number" id="dmd_year" required min="2015" max="2100"></div>
+        <div class="field"><label>Units Consumed</label><input type="number" step="0.01" id="dmd_units"></div>
+        <div class="field"><label>Demand Amount (₹) *</label><input type="number" step="0.01" id="dmd_amount" required></div>
+        <div class="field"><label>Due Date</label><input type="date" id="dmd_dueDate"></div>
+        <div class="field"><label>Status *</label>
+          <select id="dmd_status" required><option value="Unpaid">Unpaid</option><option value="Partial">Partial</option><option value="Paid">Paid</option></select>
+        </div>
+        <div class="field"><label>Paid Amount</label><input type="number" step="0.01" id="dmd_paidAmount"></div>
+        <div class="field full"><label>Remarks</label><textarea id="dmd_remarks"></textarea></div>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" data-action="save-demand">Save Entry</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+
+<div id="libWarning" style="display:none;position:fixed;top:0;left:0;right:0;background:#D14343;color:#fff;font-size:12.5px;padding:8px 14px;text-align:center;z-index:999;"></div>
+<script>
+window.__libFailures = [];
+window.__libFail = function(name){
+  window.__libFailures.push(name);
+  var el = document.getElementById('libWarning');
+  el.style.display = 'block';
+  el.textContent = '⚠ Could not load: ' + window.__libFailures.join(', ') + ' — check your internet connection and reload. Data entry still works offline; this only affects the listed feature(s).';
+};
+window.__libOk = function(name){
+  window.__libFailures = window.__libFailures.filter(n=>n!==name);
+  var el = document.getElementById('libWarning');
+  if(!window.__libFailures.length){ el.style.display='none'; }
+  else{ el.textContent = '⚠ Could not load: ' + window.__libFailures.join(', ') + ' — check your internet connection and reload. Data entry still works offline; this only affects the listed feature(s).'; }
+};
+// Loads a script from a list of CDN mirrors, trying each in turn until one succeeds.
+function loadWithFallback(urls, testFn){
+  return new Promise((resolve)=>{
+    if(testFn && testFn()){ resolve(true); return; }
+    let i = 0;
+    function tryNext(){
+      if(i >= urls.length){ resolve(false); return; }
+      const s = document.createElement('script');
+      s.src = urls[i++];
+      s.onload = ()=> resolve(true);
+      s.onerror = ()=>{ s.remove(); tryNext(); };
+      document.head.appendChild(s);
+    }
+    tryNext();
+  });
+}
+async function loadAllLibraries(){
+  const chartOk = await loadWithFallback([
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js',
+    'https://unpkg.com/chart.js@4.4.4/dist/chart.umd.min.js'
+  ], ()=> typeof Chart !== 'undefined');
+  chartOk ? window.__libOk('Chart.js (dashboard charts)') : window.__libFail('Chart.js (dashboard charts)');
+  window.dispatchEvent(new CustomEvent('lib:chart', {detail:chartOk}));
+
+  const xlsxOk = await loadWithFallback([
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+  ], ()=> typeof XLSX !== 'undefined');
+  xlsxOk ? window.__libOk('SheetJS (Excel/CSV export & import)') : window.__libFail('SheetJS (Excel/CSV export & import)');
+
+  const jspdfOk = await loadWithFallback([
+    'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js'
+  ], ()=> typeof window.jspdf !== 'undefined');
+  if(jspdfOk){
+    window.__libOk('jsPDF (PDF export)');
+    const autotableOk = await loadWithFallback([
+      'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+      'https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'
+    ]);
+    autotableOk ? window.__libOk('jsPDF-AutoTable (PDF export)') : window.__libFail('jsPDF-AutoTable (PDF export)');
+  } else {
+    window.__libFail('jsPDF (PDF export)');
+  }
+
+  const leafletOk = await loadWithFallback([
+    'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+  ], ()=> typeof L !== 'undefined');
+  leafletOk ? window.__libOk('Leaflet (Geo Map)') : window.__libFail('Leaflet (Geo Map)');
+  window.dispatchEvent(new CustomEvent('lib:leaflet', {detail:leafletOk}));
+
+  window.dispatchEvent(new CustomEvent('libsready'));
+}
+loadAllLibraries();
+</script>
+<script>
+/* ===========================================================
+   Ariankuppam Commune Panchayat — Electricity Connection & Demand Monitor
+   Single-file offline-first app. IndexedDB storage.
+   =========================================================== */
+(function(){
+"use strict";
+
+/* ---------------- IndexedDB wrapper ---------------- */
+const DB_NAME = "ariankuppam_electricity_db";
+const DB_VERSION = 2;
+let db = null;
+
+function openDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const _db = e.target.result;
+      if(!_db.objectStoreNames.contains("connections")) _db.createObjectStore("connections",{keyPath:"id"});
+      if(!_db.objectStoreNames.contains("demands")) _db.createObjectStore("demands",{keyPath:"id"});
+      if(!_db.objectStoreNames.contains("buildingTypes")) _db.createObjectStore("buildingTypes",{keyPath:"id"});
+      if(!_db.objectStoreNames.contains("tariffTypes")) _db.createObjectStore("tariffTypes",{keyPath:"id"});
+      if(!_db.objectStoreNames.contains("constituencies")) _db.createObjectStore("constituencies",{keyPath:"id"});
+      if(!_db.objectStoreNames.contains("villages")) _db.createObjectStore("villages",{keyPath:"id"});
+      if(!_db.objectStoreNames.contains("settings")) _db.createObjectStore("settings",{keyPath:"id"});
+    };
+    req.onsuccess = (e)=>{ db = e.target.result; resolve(db); };
+    req.onerror = (e)=> reject(e.target.error);
+  });
+}
+
+function txStore(storeName, mode="readonly"){
+  const tx = db.transaction(storeName, mode);
+  return tx.objectStore(storeName);
+}
+function getAll(storeName){
+  return new Promise((resolve,reject)=>{
+    const req = txStore(storeName).getAll();
+    req.onsuccess = ()=>resolve(req.result || []);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+function putItem(storeName, item){
+  return new Promise((resolve,reject)=>{
+    const req = txStore(storeName,"readwrite").put(item);
+    req.onsuccess = ()=>resolve(item);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+function deleteItem(storeName, id){
+  return new Promise((resolve,reject)=>{
+    const req = txStore(storeName,"readwrite").delete(id);
+    req.onsuccess = ()=>resolve();
+    req.onerror = ()=>reject(req.error);
+  });
+}
+function clearStore(storeName){
+  return new Promise((resolve,reject)=>{
+    const req = txStore(storeName,"readwrite").clear();
+    req.onsuccess = ()=>resolve();
+    req.onerror = ()=>reject(req.error);
+  });
+}
+
+function uid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'id-'+Date.now()+'-'+Math.random().toString(16).slice(2);
+}
+
+/* ---------------- In-memory state ---------------- */
+let STATE = {
+  connections: [],
+  demands: [],
+  buildingTypes: [],
+  tariffTypes: [],
+  constituencies: [],
+  villages: [],
+  settings: { id:"app", panchayatName:"Ariankuppam Commune Panchayat", githubToken:"", githubOwner:"", githubRepo:"", githubPath:"data/electricity-data.json", githubBranch:"main", gsheetUrl:"" }
+};
+
+const DEFAULT_BUILDING_TYPES = ["Residential","Commercial","Government Office","Street Light","Water Supply Pumpset","Community Hall","School / Educational","Other"];
+const DEFAULT_TARIFF_TYPES = ["Domestic (LT-1A)","Commercial (LT-2)","Industrial (LT-3)","Agricultural","Street Light (LT-4)","Government Institution"];
+
+const MONTH_NAMES = ["","January","February","March","April","May","June","July","August","September","October","November","December"];
+
+/* ---------------- Toast ---------------- */
+function toast(msg, type){
+  const wrap = document.getElementById("toast-wrap");
+  const t = document.createElement("div");
+  t.className = "toast" + (type ? " "+type : "");
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(()=>{ t.style.opacity="0"; t.style.transition="opacity .3s"; setTimeout(()=>t.remove(),300); }, 3200);
+}
+
+/* ---------------- Navigation ---------------- */
+const VIEW_TITLES = {
+  dashboard:"Dashboard", connections:"Service Connections", demand:"Monthly Demand",
+  map:"Geo Map", reports:"Reports & Export", settings:"Settings & Sync"
+};
+let currentView = "dashboard";
+let mapInstance = null;
+
+function showView(name){
+  currentView = name;
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("view-"+name).classList.add("active");
+  document.querySelectorAll("nav.navlist button").forEach(b=>b.classList.toggle("active", b.dataset.view===name));
+  document.getElementById("pageTitle").textContent = VIEW_TITLES[name] || name;
+  document.getElementById("sidebar").classList.remove("open");
+  if(name==="dashboard") renderDashboard();
+  if(name==="connections") renderConnectionsView();
+  if(name==="demand") renderDemandView();
+  if(name==="map") renderMapView();
+  if(name==="reports") renderReportsView();
+  if(name==="settings") renderSettingsView();
+}
+
+document.getElementById("navlist").addEventListener("click",(e)=>{
+  const btn = e.target.closest("button[data-view]");
+  if(btn) showView(btn.dataset.view);
+});
+document.getElementById("hamburger").addEventListener("click",()=>{
+  document.getElementById("sidebar").classList.toggle("open");
+});
+
+/* ---------------- Helpers: lookups ---------------- */
+function connectionById(id){ return STATE.connections.find(c=>c.id===id); }
+function buildingTypeName(id){ const t=STATE.buildingTypes.find(x=>x.id===id); return t?t.name:"—"; }
+function tariffTypeName(id){ const t=STATE.tariffTypes.find(x=>x.id===id); return t?t.name:"—"; }
+function fmtMoney(n){ return "₹" + (Number(n)||0).toLocaleString("en-IN",{maximumFractionDigits:2}); }
+function fmtMonth(m,y){ return MONTH_NAMES[m] + " " + y; }
+function demandsForConnection(connId){
+  return STATE.demands.filter(d=>d.connectionId===connId).sort((a,b)=> (b.year-a.year) || (b.month-a.month));
+}
+function latestDemand(connId){
+  const list = demandsForConnection(connId);
+  return list.length ? list[0] : null;
+}
+
+/* ---------------- Dropdown option populators ---------------- */
+function populateSelect(sel, items, valueKey, labelKey, placeholder){
+  sel.innerHTML = "";
+  if(placeholder){
+    const o = document.createElement("option"); o.value=""; o.textContent=placeholder; sel.appendChild(o);
+  }
+  items.forEach(it=>{
+    const o = document.createElement("option");
+    o.value = it[valueKey]; o.textContent = it[labelKey];
+    sel.appendChild(o);
+  });
+}
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
+let charts = {};
+function chartsAvailable(){
+  if(typeof Chart === "undefined"){ return false; }
+  return true;
+}
+function renderDashboard(){
+  const conns = STATE.connections;
+  const totalLoad = conns.reduce((s,c)=>s+(Number(c.sanctionedLoad)||0),0);
+  const now = new Date();
+  const curMonth = now.getMonth()+1, curYear = now.getFullYear();
+  const thisMonthDemand = STATE.demands.filter(d=>d.month===curMonth && d.year===curYear);
+  const thisMonthTotal = thisMonthDemand.reduce((s,d)=>s+(Number(d.demandAmount)||0),0);
+  const overdue = STATE.demands.filter(d=>{
+    if(d.status==="Paid") return false;
+    if(!d.dueDate) return false;
+    return new Date(d.dueDate) < now;
+  });
+  const geoTagged = conns.filter(c=>c.lat && c.lng).length;
+
+  const cards = [
+    {lbl:"Total Connections", val:conns.length, cls:""},
+    {lbl:"Total Sanctioned Load", val:totalLoad.toFixed(2), unit:"kW/HP", cls:""},
+    {lbl:"This Month's Demand ("+MONTH_NAMES[curMonth]+")", val:fmtMoney(thisMonthTotal), cls:"good"},
+    {lbl:"Overdue Bills", val:overdue.length, cls: overdue.length>0 ? "alert":"good"},
+    {lbl:"Geo-tagged Assets", val:geoTagged+" / "+conns.length, cls:""}
+  ];
+  document.getElementById("statCards").innerHTML = cards.map(c=>`
+    <div class="stat-card ${c.cls}">
+      <div class="lbl">${c.lbl}</div>
+      <div class="val">${c.val}${c.unit?`<small>${c.unit}</small>`:""}</div>
+    </div>`).join("");
+
+  renderTariffChart();
+  renderBuildingChart();
+  renderVillageChart();
+  renderTrendChart();
+}
+
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+
+function renderTariffChart(){
+  if(!chartsAvailable()) return;
+  destroyChart("tariff");
+  const ctx = document.getElementById("chartTariff");
+  const counts = {};
+  STATE.connections.forEach(c=>{ const n = tariffTypeName(c.tariffType); counts[n]=(counts[n]||0)+1; });
+  const labels = Object.keys(counts);
+  if(!labels.length){ ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
+  charts.tariff = new Chart(ctx, { type:"doughnut", data:{ labels, datasets:[{ data:labels.map(l=>counts[l]),
+    backgroundColor:["#F2A93B","#152238","#158C79","#D14343","#8892A6","#223460","#C97F12"] }]},
+    options:{ plugins:{legend:{position:"bottom", labels:{boxWidth:10,font:{size:11}}}} } });
+}
+function renderBuildingChart(){
+  if(!chartsAvailable()) return;
+  destroyChart("building");
+  const ctx = document.getElementById("chartBuilding");
+  const counts = {};
+  STATE.connections.forEach(c=>{ const n = buildingTypeName(c.buildingType); counts[n]=(counts[n]||0)+1; });
+  const labels = Object.keys(counts);
+  if(!labels.length){ ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
+  charts.building = new Chart(ctx, { type:"bar", data:{ labels, datasets:[{ label:"Connections", data:labels.map(l=>counts[l]), backgroundColor:"#152238", borderRadius:5 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } } });
+}
+function renderVillageChart(){
+  if(!chartsAvailable()) return;
+  destroyChart("village");
+  const ctx = document.getElementById("chartVillage");
+  const counts = {};
+  STATE.connections.forEach(c=>{ const n = c.village||"Unspecified"; counts[n]=(counts[n]||0)+1; });
+  const labels = Object.keys(counts);
+  if(!labels.length){ ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
+  charts.village = new Chart(ctx, { type:"bar", data:{ labels, datasets:[{ label:"Connections", data:labels.map(l=>counts[l]), backgroundColor:"#F2A93B", borderRadius:5 }]},
+    options:{ indexAxis:"y", plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true, ticks:{precision:0}} } } });
+}
+function renderTrendChart(){
+  if(!chartsAvailable()) return;
+  destroyChart("trend");
+  const ctx = document.getElementById("chartTrend");
+  const now = new Date();
+  const buckets = [];
+  for(let i=11;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    buckets.push({month:d.getMonth()+1, year:d.getFullYear(), label: MONTH_NAMES[d.getMonth()+1].slice(0,3)+" "+String(d.getFullYear()).slice(2)});
+  }
+  const totals = buckets.map(b=> STATE.demands.filter(d=>d.month===b.month && d.year===b.year).reduce((s,d)=>s+(Number(d.demandAmount)||0),0));
+  charts.trend = new Chart(ctx, { type:"line", data:{ labels: buckets.map(b=>b.label), datasets:[{ label:"Total Demand (₹)", data: totals,
+    borderColor:"#158C79", backgroundColor:"rgba(21,140,121,.12)", fill:true, tension:.3, pointRadius:3 }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true} } } });
+}
+
+/* =========================================================
+   CONNECTIONS VIEW
+   ========================================================= */
+function uniqueValues(arr, key){ return [...new Set(arr.map(x=>x[key]).filter(Boolean))].sort(); }
+
+function renderConnFilters(){
+  const wrap = document.getElementById("connFilters");
+  const divisions = uniqueValues(STATE.connections,"division");
+  const constituencies = uniqueValues(STATE.connections,"constituency");
+  const villages = uniqueValues(STATE.connections,"village");
+  wrap.innerHTML = `
+    <input type="search" id="f_search" placeholder="Search by consumer no / name…">
+    <select id="f_division"><option value="">All Divisions</option>${divisions.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="f_constituency"><option value="">All Constituencies</option>${constituencies.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="f_village"><option value="">All Villages</option>${villages.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="f_buildingType"><option value="">All Building Types</option>${STATE.buildingTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
+    <select id="f_tariffType"><option value="">All Tariff Types</option>${STATE.tariffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
+    <button class="btn btn-sm" id="f_clear">Clear</button>
+  `;
+  wrap.querySelectorAll("input,select").forEach(el=> el.addEventListener("input", renderConnectionsTable));
+  wrap.querySelector("#f_clear").addEventListener("click", ()=>{ renderConnFilters(); renderConnectionsTable(); });
+}
+function getConnFilterValues(){
+  return {
+    search: (document.getElementById("f_search")?.value||"").toLowerCase(),
+    division: document.getElementById("f_division")?.value||"",
+    constituency: document.getElementById("f_constituency")?.value||"",
+    village: document.getElementById("f_village")?.value||"",
+    buildingType: document.getElementById("f_buildingType")?.value||"",
+    tariffType: document.getElementById("f_tariffType")?.value||""
+  };
+}
+function filteredConnections(){
+  const f = getConnFilterValues();
+  return STATE.connections.filter(c=>{
+    if(f.search && !( (c.consumerNo||"").toLowerCase().includes(f.search) || (c.consumerName||"").toLowerCase().includes(f.search) )) return false;
+    if(f.division && c.division!==f.division) return false;
+    if(f.constituency && c.constituency!==f.constituency) return false;
+    if(f.village && c.village!==f.village) return false;
+    if(f.buildingType && c.buildingType!==f.buildingType) return false;
+    if(f.tariffType && c.tariffType!==f.tariffType) return false;
+    return true;
+  });
+}
+function renderConnectionsView(){
+  renderConnFilters();
+  renderConnectionsTable();
+}
+function renderConnectionsTable(){
+  const body = document.getElementById("connTableBody");
+  const list = filteredConnections();
+  if(!list.length){
+    body.innerHTML = `<tr><td colspan="10"><div class="empty"><div class="big">🗂</div>No connections found. Click "New Connection" to add one.</div></td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(c=>`
+    <tr>
+      <td class="mono">${c.consumerNo||""}</td>
+      <td>${c.consumerName||""}</td>
+      <td>${c.division||""}</td>
+      <td>${c.constituency||""}</td>
+      <td>${c.village||""}</td>
+      <td>${buildingTypeName(c.buildingType)}</td>
+      <td>${tariffTypeName(c.tariffType)}</td>
+      <td class="mono">${c.sanctionedLoad||""}</td>
+      <td>${c.lat && c.lng ? "✅" : "—"}</td>
+      <td><div class="row-actions">
+        <button class="icon-btn" data-edit-conn="${c.id}" title="Edit">✏️</button>
+        <button class="icon-btn" data-del-conn="${c.id}" title="Delete">🗑️</button>
+      </div></td>
+    </tr>`).join("");
+  body.querySelectorAll("[data-edit-conn]").forEach(b=>b.addEventListener("click",()=>openConnectionModal(b.dataset.editConn)));
+  body.querySelectorAll("[data-del-conn]").forEach(b=>b.addEventListener("click",()=>deleteConnection(b.dataset.delConn)));
+}
+
+async function deleteConnection(id){
+  const relatedDemands = STATE.demands.filter(d=>d.connectionId===id);
+  const msg = relatedDemands.length
+    ? `Delete this connection and its ${relatedDemands.length} demand record(s)? This cannot be undone.`
+    : "Delete this connection? This cannot be undone.";
+  if(!confirm(msg)) return;
+  await deleteItem("connections", id);
+  for(const d of relatedDemands){ await deleteItem("demands", d.id); }
+  STATE.connections = STATE.connections.filter(c=>c.id!==id);
+  STATE.demands = STATE.demands.filter(d=>d.connectionId!==id);
+  toast("Connection deleted","ok");
+  renderConnectionsView();
+  if(currentView==="dashboard") renderDashboard();
+}
+
+/* ---- Connection Modal ---- */
+function populateNameSelect(sel, items, placeholder, currentValue){
+  sel.innerHTML = "";
+  const o0 = document.createElement("option"); o0.value=""; o0.textContent=placeholder; sel.appendChild(o0);
+  const names = items.map(i=>i.name);
+  if(currentValue && !names.includes(currentValue)) names.push(currentValue); // preserve legacy/orphan values so nothing is silently lost
+  names.forEach(n=>{ const o=document.createElement("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
+  sel.value = currentValue || "";
+}
+function openConnectionModal(id){
+  const overlay = document.getElementById("connModalOverlay");
+  const form = document.getElementById("connForm");
+  form.reset();
+  const c = id ? connectionById(id) : null;
+  populateSelect(document.getElementById("conn_buildingType"), STATE.buildingTypes, "id","name","Select building type");
+  populateSelect(document.getElementById("conn_tariffType"), STATE.tariffTypes, "id","name","Select tariff type");
+  populateNameSelect(document.getElementById("conn_constituency"), STATE.constituencies, "Select constituency", c?c.constituency:"");
+  populateNameSelect(document.getElementById("conn_village"), STATE.villages, "Select village", c?c.village:"");
+  document.getElementById("geoStatus").textContent = "";
+
+  if(id){
+    document.getElementById("connModalTitle").textContent = "Edit Connection";
+    document.getElementById("conn_id").value = c.id;
+    document.getElementById("conn_division").value = c.division||"";
+    document.getElementById("conn_panchayat").value = c.panchayatName||"";
+    document.getElementById("conn_consumerNo").value = c.consumerNo||"";
+    document.getElementById("conn_load").value = c.sanctionedLoad||"";
+    document.getElementById("conn_name").value = c.consumerName||"";
+    document.getElementById("conn_address").value = c.address||"";
+    document.getElementById("conn_buildingType").value = c.buildingType||"";
+    document.getElementById("conn_tariffType").value = c.tariffType||"";
+    document.getElementById("conn_lat").value = c.lat||"";
+    document.getElementById("conn_lng").value = c.lng||"";
+  } else {
+    document.getElementById("connModalTitle").textContent = "New Connection";
+    document.getElementById("conn_id").value = "";
+    document.getElementById("conn_panchayat").value = STATE.settings.panchayatName||"Ariankuppam Commune Panchayat";
+  }
+  overlay.classList.add("active");
+}
+function closeModal(overlay){ overlay.classList.remove("active"); }
+
+document.getElementById("connModalOverlay").addEventListener("click",(e)=>{
+  if(e.target.dataset.close!==undefined || e.target.closest("[data-close]")) closeModal(document.getElementById("connModalOverlay"));
+});
+document.getElementById("demandModalOverlay").addEventListener("click",(e)=>{
+  if(e.target.dataset.close!==undefined || e.target.closest("[data-close]")) closeModal(document.getElementById("demandModalOverlay"));
+});
+
+document.querySelector('[data-action="quick-add-constituency"]').addEventListener("click", async ()=>{
+  const name = (prompt("New constituency name:")||"").trim();
+  if(!name) return;
+  const existing = STATE.constituencies.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  const item = existing || {id:uid(), name};
+  if(!existing){ await putItem("constituencies", item); STATE.constituencies.push(item); }
+  const sel = document.getElementById("conn_constituency");
+  populateNameSelect(sel, STATE.constituencies, "Select constituency", item.name);
+  toast("Constituency added","ok");
+});
+document.querySelector('[data-action="quick-add-village"]').addEventListener("click", async ()=>{
+  const name = (prompt("New village name:")||"").trim();
+  if(!name) return;
+  const existing = STATE.villages.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  const item = existing || {id:uid(), name};
+  if(!existing){ await putItem("villages", item); STATE.villages.push(item); }
+  const sel = document.getElementById("conn_village");
+  populateNameSelect(sel, STATE.villages, "Select village", item.name);
+  toast("Village added","ok");
+});
+
+document.querySelector('[data-action="capture-geo"]').addEventListener("click",()=>{
+  const statusEl = document.getElementById("geoStatus");
+  if(!navigator.geolocation){ statusEl.textContent = "Geolocation not supported on this device."; return; }
+  statusEl.textContent = "Capturing location…";
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    document.getElementById("conn_lat").value = pos.coords.latitude.toFixed(6);
+    document.getElementById("conn_lng").value = pos.coords.longitude.toFixed(6);
+    statusEl.textContent = "Location captured (±"+Math.round(pos.coords.accuracy)+"m accuracy).";
+  }, (err)=>{
+    statusEl.textContent = "Could not get location: "+err.message;
+  }, {enableHighAccuracy:true, timeout:15000});
+});
+
+document.querySelector('[data-action="save-connection"]').addEventListener("click", async ()=>{
+  const form = document.getElementById("connForm");
+  if(!form.reportValidity()) return;
+  const id = document.getElementById("conn_id").value || uid();
+  const record = {
+    id,
+    division: document.getElementById("conn_division").value.trim(),
+    panchayatName: document.getElementById("conn_panchayat").value.trim(),
+    consumerNo: document.getElementById("conn_consumerNo").value.trim(),
+    constituency: document.getElementById("conn_constituency").value.trim(),
+    village: document.getElementById("conn_village").value.trim(),
+    sanctionedLoad: parseFloat(document.getElementById("conn_load").value)||0,
+    consumerName: document.getElementById("conn_name").value.trim(),
+    address: document.getElementById("conn_address").value.trim(),
+    buildingType: document.getElementById("conn_buildingType").value,
+    tariffType: document.getElementById("conn_tariffType").value,
+    lat: document.getElementById("conn_lat").value || null,
+    lng: document.getElementById("conn_lng").value || null,
+    updatedAt: new Date().toISOString(),
+    createdAt: (connectionById(id)?.createdAt) || new Date().toISOString()
+  };
+  await putItem("connections", record);
+  const idx = STATE.connections.findIndex(c=>c.id===id);
+  if(idx>=0) STATE.connections[idx]=record; else STATE.connections.push(record);
+  closeModal(document.getElementById("connModalOverlay"));
+  toast("Connection saved","ok");
+  renderConnectionsView();
+  if(currentView==="dashboard") renderDashboard();
+});
+
+document.querySelectorAll('[data-action="new-connection"]').forEach(b=>b.addEventListener("click",()=>openConnectionModal(null)));
+
+/* =========================================================
+   DEMAND VIEW
+   ========================================================= */
+function renderDemandFilters(){
+  const wrap = document.getElementById("demandFilters");
+  const years = [...new Set(STATE.demands.map(d=>d.year))].sort((a,b)=>b-a);
+  wrap.innerHTML = `
+    <input type="search" id="fd_search" placeholder="Search consumer no / name…">
+    <select id="fd_year"><option value="">All Years</option>${years.map(y=>`<option>${y}</option>`).join("")}</select>
+    <select id="fd_month"><option value="">All Months</option>${MONTH_NAMES.map((m,i)=> i? `<option value="${i}">${m}</option>`:"").join("")}</select>
+    <select id="fd_status"><option value="">All Status</option><option>Paid</option><option>Unpaid</option><option>Partial</option></select>
+    <button class="btn btn-sm" id="fd_clear">Clear</button>
+  `;
+  wrap.querySelectorAll("input,select").forEach(el=> el.addEventListener("input", renderDemandTable));
+  wrap.querySelector("#fd_clear").addEventListener("click", ()=>{ renderDemandFilters(); renderDemandTable(); });
+}
+function filteredDemands(){
+  const search = (document.getElementById("fd_search")?.value||"").toLowerCase();
+  const year = document.getElementById("fd_year")?.value||"";
+  const month = document.getElementById("fd_month")?.value||"";
+  const status = document.getElementById("fd_status")?.value||"";
+  return STATE.demands.filter(d=>{
+    const c = connectionById(d.connectionId) || {};
+    if(search && !((c.consumerNo||"").toLowerCase().includes(search) || (c.consumerName||"").toLowerCase().includes(search))) return false;
+    if(year && String(d.year)!==year) return false;
+    if(month && String(d.month)!==month) return false;
+    if(status && d.status!==status) return false;
+    return true;
+  }).sort((a,b)=> (b.year-a.year)||(b.month-a.month));
+}
+function renderDemandView(){
+  renderDemandFilters();
+  renderDemandTable();
+}
+function renderDemandTable(){
+  const body = document.getElementById("demandTableBody");
+  const list = filteredDemands();
+  if(!list.length){
+    body.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="big">🧾</div>No demand entries found.</div></td></tr>`;
+    return;
+  }
+  body.innerHTML = list.map(d=>{
+    const c = connectionById(d.connectionId) || {};
+    const badgeClass = d.status==="Paid"?"paid":(d.status==="Partial"?"partial":"unpaid");
+    return `<tr>
+      <td class="mono">${c.consumerNo||"—"}</td>
+      <td>${c.consumerName||"—"}</td>
+      <td>${fmtMonth(d.month, d.year)}</td>
+      <td class="mono">${d.unitsConsumed||""}</td>
+      <td class="mono">${fmtMoney(d.demandAmount)}</td>
+      <td><span class="badge ${badgeClass}">${d.status}</span></td>
+      <td class="mono">${d.paidAmount?fmtMoney(d.paidAmount):"—"}</td>
+      <td>${d.dueDate||"—"}</td>
+      <td><div class="row-actions">
+        <button class="icon-btn" data-edit-dmd="${d.id}" title="Edit">✏️</button>
+        <button class="icon-btn" data-del-dmd="${d.id}" title="Delete">🗑️</button>
+      </div></td>
+    </tr>`;
+  }).join("");
+  body.querySelectorAll("[data-edit-dmd]").forEach(b=>b.addEventListener("click",()=>openDemandModal(b.dataset.editDmd)));
+  body.querySelectorAll("[data-del-dmd]").forEach(b=>b.addEventListener("click",()=>deleteDemand(b.dataset.delDmd)));
+}
+async function deleteDemand(id){
+  if(!confirm("Delete this demand entry?")) return;
+  await deleteItem("demands", id);
+  STATE.demands = STATE.demands.filter(d=>d.id!==id);
+  toast("Demand entry deleted","ok");
+  renderDemandView();
+  if(currentView==="dashboard") renderDashboard();
+}
+
+function openDemandModal(id, presetConnId){
+  if(!STATE.connections.length){ toast("Add a connection first before recording demand.","err"); return; }
+  const overlay = document.getElementById("demandModalOverlay");
+  const form = document.getElementById("demandForm");
+  form.reset();
+  populateSelect(document.getElementById("dmd_connectionId"), STATE.connections.map(c=>({id:c.id, label:`${c.consumerNo} — ${c.consumerName}`})), "id","label","Select connection");
+  const now = new Date();
+  document.getElementById("dmd_year").value = now.getFullYear();
+  document.getElementById("dmd_month").value = now.getMonth()+1;
+  document.getElementById("dmd_status").value = "Unpaid";
+
+  if(id){
+    const d = STATE.demands.find(x=>x.id===id);
+    document.getElementById("demandModalTitle").textContent = "Edit Demand Entry";
+    document.getElementById("dmd_id").value = d.id;
+    document.getElementById("dmd_connectionId").value = d.connectionId;
+    document.getElementById("dmd_month").value = d.month;
+    document.getElementById("dmd_year").value = d.year;
+    document.getElementById("dmd_units").value = d.unitsConsumed||"";
+    document.getElementById("dmd_amount").value = d.demandAmount||"";
+    document.getElementById("dmd_dueDate").value = d.dueDate||"";
+    document.getElementById("dmd_status").value = d.status||"Unpaid";
+    document.getElementById("dmd_paidAmount").value = d.paidAmount||"";
+    document.getElementById("dmd_remarks").value = d.remarks||"";
+  } else {
+    document.getElementById("demandModalTitle").textContent = "Add Demand Entry";
+    document.getElementById("dmd_id").value = "";
+    if(presetConnId) document.getElementById("dmd_connectionId").value = presetConnId;
+  }
+  overlay.classList.add("active");
+}
+document.querySelectorAll('[data-action="new-demand"]').forEach(b=>b.addEventListener("click",()=>openDemandModal(null)));
+
+document.querySelector('[data-action="save-demand"]').addEventListener("click", async ()=>{
+  const form = document.getElementById("demandForm");
+  if(!form.reportValidity()) return;
+  const id = document.getElementById("dmd_id").value || uid();
+  const record = {
+    id,
+    connectionId: document.getElementById("dmd_connectionId").value,
+    month: parseInt(document.getElementById("dmd_month").value,10),
+    year: parseInt(document.getElementById("dmd_year").value,10),
+    unitsConsumed: parseFloat(document.getElementById("dmd_units").value)||0,
+    demandAmount: parseFloat(document.getElementById("dmd_amount").value)||0,
+    dueDate: document.getElementById("dmd_dueDate").value||"",
+    status: document.getElementById("dmd_status").value,
+    paidAmount: parseFloat(document.getElementById("dmd_paidAmount").value)||0,
+    remarks: document.getElementById("dmd_remarks").value.trim(),
+    updatedAt: new Date().toISOString(),
+    createdAt: (STATE.demands.find(x=>x.id===id)?.createdAt) || new Date().toISOString()
+  };
+  await putItem("demands", record);
+  const idx = STATE.demands.findIndex(d=>d.id===id);
+  if(idx>=0) STATE.demands[idx]=record; else STATE.demands.push(record);
+  closeModal(document.getElementById("demandModalOverlay"));
+  toast("Demand entry saved","ok");
+  renderDemandView();
+  if(currentView==="dashboard") renderDashboard();
+});
+
+/* =========================================================
+   MAP VIEW
+   ========================================================= */
+function renderMapView(){
+  const container = document.getElementById("leafletMap");
+  if(typeof L === "undefined"){
+    container.innerHTML = `<div class="empty"><div class="big">📍</div>Map library failed to load. Check your internet connection and reload the page — geo-tagged data is still saved and will appear here once the map loads.</div>`;
+    return;
+  }
+  if(!mapInstance){
+    mapInstance = L.map(container).setView([11.90, 79.80], 12); // approx Puducherry region
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    }).addTo(mapInstance);
+    mapInstance._markersLayer = L.layerGroup().addTo(mapInstance);
+  } else {
+    mapInstance._markersLayer.clearLayers();
+    setTimeout(()=>mapInstance.invalidateSize(), 150);
+  }
+  const tagged = STATE.connections.filter(c=>c.lat && c.lng);
+  if(!tagged.length) return;
+  const bounds = [];
+  tagged.forEach(c=>{
+    const lat = parseFloat(c.lat), lng = parseFloat(c.lng);
+    bounds.push([lat,lng]);
+    const marker = L.marker([lat,lng]).addTo(mapInstance._markersLayer);
+    marker.bindPopup(`<strong>${c.consumerName||""}</strong><br>Consumer No: ${c.consumerNo||""}<br>${buildingTypeName(c.buildingType)} · ${tariffTypeName(c.tariffType)}<br>${c.village||""}, ${c.constituency||""}<br>Load: ${c.sanctionedLoad||""} kW/HP`);
+  });
+  if(bounds.length) mapInstance.fitBounds(bounds, {padding:[30,30], maxZoom:16});
+}
+
+/* =========================================================
+   REPORTS VIEW
+   ========================================================= */
+function renderReportFilters(){
+  const wrap = document.getElementById("reportFilters");
+  const divisions = uniqueValues(STATE.connections,"division");
+  const constituencies = uniqueValues(STATE.connections,"constituency");
+  const villages = uniqueValues(STATE.connections,"village");
+  wrap.innerHTML = `
+    <select id="r_division"><option value="">All Divisions</option>${divisions.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="r_constituency"><option value="">All Constituencies</option>${constituencies.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="r_village"><option value="">All Villages</option>${villages.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="r_buildingType"><option value="">All Building Types</option>${STATE.buildingTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
+    <select id="r_tariffType"><option value="">All Tariff Types</option>${STATE.tariffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
+  `;
+  wrap.querySelectorAll("select").forEach(el=>el.addEventListener("input", renderReportTable));
+}
+function reportRows(){
+  const division = document.getElementById("r_division")?.value||"";
+  const constituency = document.getElementById("r_constituency")?.value||"";
+  const village = document.getElementById("r_village")?.value||"";
+  const buildingType = document.getElementById("r_buildingType")?.value||"";
+  const tariffType = document.getElementById("r_tariffType")?.value||"";
+  return STATE.connections.filter(c=>{
+    if(division && c.division!==division) return false;
+    if(constituency && c.constituency!==constituency) return false;
+    if(village && c.village!==village) return false;
+    if(buildingType && c.buildingType!==buildingType) return false;
+    if(tariffType && c.tariffType!==tariffType) return false;
+    return true;
+  });
+}
+function renderReportsView(){
+  renderReportFilters();
+  renderReportTable();
+}
+function renderReportTable(){
+  const rows = reportRows();
+  document.getElementById("reportSummaryLine").textContent = `${rows.length} connection(s)`;
+  const body = document.getElementById("reportTableBody");
+  if(!rows.length){
+    body.innerHTML = `<tr><td colspan="10"><div class="empty">No matching connections.</div></td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(c=>{
+    const ld = latestDemand(c.id);
+    return `<tr>
+      <td class="mono">${c.consumerNo||""}</td>
+      <td>${c.consumerName||""}</td>
+      <td>${c.division||""}</td>
+      <td>${c.constituency||""}</td>
+      <td>${c.village||""}</td>
+      <td>${buildingTypeName(c.buildingType)}</td>
+      <td>${tariffTypeName(c.tariffType)}</td>
+      <td class="mono">${c.sanctionedLoad||""}</td>
+      <td>${ld? fmtMonth(ld.month,ld.year)+" — "+fmtMoney(ld.demandAmount) : "—"}</td>
+      <td>${ld? `<span class="badge ${ld.status==="Paid"?"paid":(ld.status==="Partial"?"partial":"unpaid")}">${ld.status}</span>` : "—"}</td>
+    </tr>`;
+  }).join("");
+}
+
+function reportDataForExport(){
+  return reportRows().map(c=>{
+    const ld = latestDemand(c.id);
+    return {
+      "Consumer No": c.consumerNo||"", "Consumer Name": c.consumerName||"",
+      "Division": c.division||"", "Panchayat": c.panchayatName||"",
+      "Constituency": c.constituency||"", "Village": c.village||"",
+      "Address": c.address||"",
+      "Building Type": buildingTypeName(c.buildingType), "Tariff Type": tariffTypeName(c.tariffType),
+      "Sanctioned Load": c.sanctionedLoad||"",
+      "Latitude": c.lat||"", "Longitude": c.lng||"",
+      "Last Demand Month": ld? fmtMonth(ld.month,ld.year):"",
+      "Last Demand Amount": ld? ld.demandAmount:"",
+      "Last Demand Status": ld? ld.status:"",
+      "Units Consumed (last)": ld? ld.unitsConsumed:""
+    };
+  });
+}
+
+document.querySelector('[data-action="export-excel"]').addEventListener("click", ()=>{
+  if(typeof XLSX === "undefined"){ toast("Excel library failed to load — check your internet connection and reload","err"); return; }
+  const data = reportDataForExport();
+  if(!data.length){ toast("No data to export","err"); return; }
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Connections Report");
+  XLSX.writeFile(wb, "Ariankuppam_Electricity_Report.xlsx");
+  toast("Excel file downloaded","ok");
+});
+document.querySelector('[data-action="export-csv"]').addEventListener("click", ()=>{
+  if(typeof XLSX === "undefined"){ toast("Excel library failed to load — check your internet connection and reload","err"); return; }
+  const data = reportDataForExport();
+  if(!data.length){ toast("No data to export","err"); return; }
+  const ws = XLSX.utils.json_to_sheet(data);
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Ariankuppam_Electricity_Report.csv"; a.click();
+  toast("CSV file downloaded","ok");
+});
+document.querySelector('[data-action="export-pdf"]').addEventListener("click", ()=>{
+  if(typeof window.jspdf === "undefined"){ toast("PDF library failed to load — check your internet connection and reload","err"); return; }
+  const data = reportRows();
+  if(!data.length){ toast("No data to export","err"); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:"landscape"});
+  doc.setFontSize(14);
+  doc.text(STATE.settings.panchayatName || "Ariankuppam Commune Panchayat", 14, 14);
+  doc.setFontSize(10);
+  doc.text("Electricity Service Connection & Demand Report — Generated " + new Date().toLocaleDateString("en-IN"), 14, 20);
+  doc.autoTable({
+    startY: 26,
+    head: [["Consumer No","Name","Division","Constituency","Village","Building","Tariff","Load","Last Demand","Status"]],
+    body: data.map(c=>{
+      const ld = latestDemand(c.id);
+      return [c.consumerNo||"", c.consumerName||"", c.division||"", c.constituency||"", c.village||"",
+        buildingTypeName(c.buildingType), tariffTypeName(c.tariffType), c.sanctionedLoad||"",
+        ld? fmtMonth(ld.month,ld.year)+" - "+fmtMoney(ld.demandAmount):"—", ld?ld.status:"—"];
+    }),
+    styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]}
+  });
+  doc.save("Ariankuppam_Electricity_Report.pdf");
+  toast("PDF report downloaded","ok");
+});
+document.querySelector('[data-action="print-report"]').addEventListener("click", ()=> window.print());
+
+/* ---- KML export (geo-tagged assets) ---- */
+function xmlEscape(str){
+  return String(str==null?"":str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+}
+document.querySelector('[data-action="export-kml"]').addEventListener("click", ()=>{
+  const rows = reportRows().filter(c=>c.lat && c.lng);
+  if(!rows.length){ toast("No geo-tagged connections in the current filter to export","err"); return; }
+  const placemarks = rows.map(c=>{
+    const ld = latestDemand(c.id);
+    const desc = [
+      `Consumer No: ${c.consumerNo||""}`,
+      `Division: ${c.division||""}`,
+      `Panchayat: ${c.panchayatName||""}`,
+      `Constituency: ${c.constituency||""}`,
+      `Village: ${c.village||""}`,
+      `Address: ${c.address||""}`,
+      `Building Type: ${buildingTypeName(c.buildingType)}`,
+      `Tariff Type: ${tariffTypeName(c.tariffType)}`,
+      `Sanctioned Load: ${c.sanctionedLoad||""}`,
+      ld ? `Last Demand: ${fmtMonth(ld.month,ld.year)} — ${fmtMoney(ld.demandAmount)} (${ld.status})` : ""
+    ].filter(Boolean).join("&#10;");
+    return `  <Placemark>
+    <name>${xmlEscape(c.consumerName||c.consumerNo||"Connection")}</name>
+    <description>${xmlEscape(desc)}</description>
+    <ExtendedData>
+      <Data name="ConsumerNo"><value>${xmlEscape(c.consumerNo)}</value></Data>
+      <Data name="BuildingType"><value>${xmlEscape(buildingTypeName(c.buildingType))}</value></Data>
+      <Data name="TariffType"><value>${xmlEscape(tariffTypeName(c.tariffType))}</value></Data>
+      <Data name="SanctionedLoad"><value>${xmlEscape(c.sanctionedLoad)}</value></Data>
+    </ExtendedData>
+    <Point><coordinates>${parseFloat(c.lng)},${parseFloat(c.lat)},0</coordinates></Point>
+  </Placemark>`;
+  }).join("\n");
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>${xmlEscape(STATE.settings.panchayatName||"Ariankuppam Commune Panchayat")} — Electricity Assets</name>
+${placemarks}
+</Document>
+</kml>`;
+  const blob = new Blob([kml], {type:"application/vnd.google-earth.kml+xml"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "Ariankuppam_Electricity_Assets.kml";
+  a.click();
+  toast("KML file downloaded","ok");
+});
+
+/* ---- Excel / CSV import (round-trips with the exported report format) ---- */
+document.querySelector('[data-action="import-excel"]').addEventListener("click", ()=>{
+  document.getElementById("importExcelInput").click();
+});
+function firstNonEmpty(row, keys){
+  for(const k of keys){ if(row[k]!==undefined && row[k]!==null && String(row[k]).trim()!=="") return row[k]; }
+  return "";
+}
+async function findOrCreateType(store, name){
+  name = String(name||"").trim();
+  if(!name) return "";
+  const existing = STATE[store].find(t=>t.name.toLowerCase()===name.toLowerCase());
+  if(existing) return existing.id;
+  const item = {id:uid(), name};
+  await putItem(store, item);
+  STATE[store].push(item);
+  return item.id;
+}
+async function ensureNameInList(store, name){
+  name = String(name||"").trim();
+  if(!name) return "";
+  const existing = STATE[store].find(t=>t.name.toLowerCase()===name.toLowerCase());
+  if(!existing){ const item={id:uid(), name}; await putItem(store, item); STATE[store].push(item); }
+  return name;
+}
+document.getElementById("importExcelInput").addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  const statusEl = document.getElementById("importExcelStatus");
+  if(!file) return;
+  if(typeof XLSX === "undefined"){ statusEl.textContent = "❌ Excel library failed to load — check your internet connection and reload."; return; }
+  statusEl.textContent = "Reading file…";
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:"array"});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:""});
+    if(!rows.length) throw new Error("No rows found in the file.");
+    let added=0, updated=0, skipped=0;
+    for(const row of rows){
+      const consumerNo = String(firstNonEmpty(row, ["Consumer No","consumer no","Electricity Consumer No","Consumer Number"])).trim();
+      const consumerName = String(firstNonEmpty(row, ["Consumer Name","Name of Consumer","consumer name"])).trim();
+      if(!consumerNo && !consumerName){ skipped++; continue; }
+      const buildingTypeId = await findOrCreateType("buildingTypes", firstNonEmpty(row,["Building Type","Type of Building"]));
+      const tariffTypeId = await findOrCreateType("tariffTypes", firstNonEmpty(row,["Tariff Type","Type of Tariff"]));
+      const constituencyName = await ensureNameInList("constituencies", firstNonEmpty(row,["Constituency"]));
+      const villageName = await ensureNameInList("villages", firstNonEmpty(row,["Village"]));
+      const existing = consumerNo ? STATE.connections.find(c=>c.consumerNo===consumerNo) : null;
+      const record = {
+        id: existing ? existing.id : uid(),
+        division: String(firstNonEmpty(row,["Division","Electricity Revenue Division"])) || (existing?.division||""),
+        panchayatName: String(firstNonEmpty(row,["Panchayat","Name of Commune Panchayat"])) || STATE.settings.panchayatName,
+        consumerNo: consumerNo || existing?.consumerNo || "",
+        constituency: constituencyName || (existing?.constituency||""),
+        village: villageName || (existing?.village||""),
+        sanctionedLoad: parseFloat(firstNonEmpty(row,["Sanctioned Load","Sanctioned load"])) || (existing?.sanctionedLoad||0),
+        consumerName: consumerName || existing?.consumerName || "",
+        address: String(firstNonEmpty(row,["Address","Address of Consumer"])) || (existing?.address||""),
+        buildingType: buildingTypeId || existing?.buildingType || "",
+        tariffType: tariffTypeId || existing?.tariffType || "",
+        lat: firstNonEmpty(row,["Latitude","Lat"]) || existing?.lat || null,
+        lng: firstNonEmpty(row,["Longitude","Lng","Long"]) || existing?.lng || null,
+        updatedAt: new Date().toISOString(),
+        createdAt: existing?.createdAt || new Date().toISOString()
+      };
+      await putItem("connections", record);
+      if(existing){
+        const idx = STATE.connections.findIndex(c=>c.id===record.id);
+        STATE.connections[idx] = record;
+        updated++;
+      } else {
+        STATE.connections.push(record);
+        added++;
+      }
+    }
+    statusEl.textContent = `Import complete: ${added} added, ${updated} updated${skipped?`, ${skipped} skipped (no consumer no/name)`:""}.`;
+    toast("Excel/CSV import complete","ok");
+    refreshDropdownDependents();
+    if(currentView==="reports") renderReportsView();
+  }catch(err){
+    statusEl.textContent = "❌ Import failed: " + err.message;
+    toast("Import failed","err");
+  }
+  e.target.value = "";
+});
+
+/* =========================================================
+   SETTINGS VIEW — dropdown management, GitHub, Google Sheets
+   ========================================================= */
+function renderSettingsView(){
+  document.getElementById("settingPanchayatName").value = STATE.settings.panchayatName||"";
+  document.getElementById("ghToken").value = STATE.settings.githubToken||"";
+  document.getElementById("ghRepo").value = (STATE.settings.githubOwner && STATE.settings.githubRepo) ? `${STATE.settings.githubOwner}/${STATE.settings.githubRepo}` : "";
+  document.getElementById("ghPath").value = STATE.settings.githubPath||"data/electricity-data.json";
+  document.getElementById("ghBranch").value = STATE.settings.githubBranch||"main";
+  document.getElementById("gsheetUrl").value = STATE.settings.gsheetUrl||"";
+  renderTagList("buildingTypeList","buildingTypes");
+  renderTagList("tariffTypeList","tariffTypes");
+  renderTagList("constituencyList","constituencies");
+  renderTagList("villageList","villages");
+}
+const TAG_CONFIG = {
+  buildingTypes: {mode:"id", field:"buildingType"},
+  tariffTypes: {mode:"id", field:"tariffType"},
+  constituencies: {mode:"name", field:"constituency"},
+  villages: {mode:"name", field:"village"}
+};
+function renderTagList(elementId, storeKey){
+  const wrap = document.getElementById(elementId);
+  const items = STATE[storeKey];
+  const cfg = TAG_CONFIG[storeKey];
+  if(!items.length){ wrap.innerHTML = `<div style="font-size:12px;color:var(--ink-faint);padding:6px 2px;">No items yet.</div>`; return; }
+  wrap.innerHTML = items.map(it=>`
+    <div class="tag-manage-row">
+      <input type="text" value="${it.name.replace(/"/g,'&quot;')}" data-tag-id="${it.id}" data-store="${storeKey}">
+      <button class="icon-btn" data-tag-del="${it.id}" data-store="${storeKey}" title="Delete">🗑️</button>
+    </div>`).join("");
+  wrap.querySelectorAll("input[data-tag-id]").forEach(inp=>{
+    inp.addEventListener("change", async ()=>{
+      const store = inp.dataset.store, id = inp.dataset.tagId;
+      const c = TAG_CONFIG[store];
+      const item = STATE[store].find(x=>x.id===id);
+      const oldName = item.name;
+      const newName = inp.value.trim();
+      if(!newName){ inp.value = oldName; return; }
+      item.name = newName;
+      await putItem(store, item);
+      if(c.mode==="name" && oldName!==newName){
+        // Cascade the rename into existing connections so records stay in sync with the dropdown list
+        const affected = STATE.connections.filter(conn => conn[c.field]===oldName);
+        for(const conn of affected){
+          conn[c.field] = newName;
+          await putItem("connections", conn);
+        }
+      }
+      toast("Updated"+(c.mode==="name" && oldName!==newName ? ` — applied to existing connections`:""),"ok");
+      refreshDropdownDependents();
+    });
+  });
+  wrap.querySelectorAll("[data-tag-del]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const store = btn.dataset.store, id = btn.dataset.tagDel;
+      const c = TAG_CONFIG[store];
+      const item = STATE[store].find(x=>x.id===id);
+      const inUse = STATE.connections.some(conn => c.mode==="id" ? conn[c.field]===id : conn[c.field]===item.name);
+      const msg = c.mode==="id"
+        ? "This type is used by existing connections. Delete anyway? Existing records will show '—' for this field."
+        : "This value is used by existing connections. Deleting it only removes it from the dropdown list — existing records keep their current value. Continue?";
+      if(inUse && !confirm(msg)) return;
+      await deleteItem(store, id);
+      STATE[store] = STATE[store].filter(x=>x.id!==id);
+      renderTagList(elementId, storeKey);
+      toast("Deleted","ok");
+      refreshDropdownDependents();
+    });
+  });
+}
+function refreshDropdownDependents(){
+  if(currentView==="connections") renderConnectionsView();
+  if(currentView==="reports") renderReportsView();
+  if(currentView==="dashboard") renderDashboard();
+}
+
+document.querySelector('[data-action="add-building-type"]').addEventListener("click", async ()=>{
+  const inp = document.getElementById("newBuildingType");
+  const name = inp.value.trim();
+  if(!name) return;
+  const item = {id:uid(), name};
+  await putItem("buildingTypes", item);
+  STATE.buildingTypes.push(item);
+  inp.value = "";
+  renderTagList("buildingTypeList","buildingTypes");
+  toast("Building type added","ok");
+});
+document.querySelector('[data-action="add-constituency"]').addEventListener("click", async ()=>{
+  const inp = document.getElementById("newConstituency");
+  const name = inp.value.trim();
+  if(!name) return;
+  if(STATE.constituencies.some(x=>x.name.toLowerCase()===name.toLowerCase())){ toast("That constituency already exists","err"); return; }
+  const item = {id:uid(), name};
+  await putItem("constituencies", item);
+  STATE.constituencies.push(item);
+  inp.value = "";
+  renderTagList("constituencyList","constituencies");
+  toast("Constituency added","ok");
+});
+document.querySelector('[data-action="add-village"]').addEventListener("click", async ()=>{
+  const inp = document.getElementById("newVillage");
+  const name = inp.value.trim();
+  if(!name) return;
+  if(STATE.villages.some(x=>x.name.toLowerCase()===name.toLowerCase())){ toast("That village already exists","err"); return; }
+  const item = {id:uid(), name};
+  await putItem("villages", item);
+  STATE.villages.push(item);
+  inp.value = "";
+  renderTagList("villageList","villages");
+  toast("Village added","ok");
+});
+document.querySelector('[data-action="add-tariff-type"]').addEventListener("click", async ()=>{
+  const inp = document.getElementById("newTariffType");
+  const name = inp.value.trim();
+  if(!name) return;
+  const item = {id:uid(), name};
+  await putItem("tariffTypes", item);
+  STATE.tariffTypes.push(item);
+  inp.value = "";
+  renderTagList("tariffTypeList","tariffTypes");
+  toast("Tariff type added","ok");
+});
+
+document.querySelector('[data-action="save-settings"]').addEventListener("click", async ()=>{
+  STATE.settings.panchayatName = document.getElementById("settingPanchayatName").value.trim() || "Ariankuppam Commune Panchayat";
+  await putItem("settings", STATE.settings);
+  toast("Settings saved","ok");
+});
+
+/* ---- GitHub backup / restore ---- */
+function b64EncodeUnicode(str){
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m,p1)=>String.fromCharCode('0x'+p1)));
+}
+function b64DecodeUnicode(str){
+  return decodeURIComponent(atob(str).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+}
+document.querySelector('[data-action="save-github-settings"]').addEventListener("click", async ()=>{
+  const repoVal = document.getElementById("ghRepo").value.trim();
+  const [owner, repo] = repoVal.split("/").map(s=>s?.trim());
+  STATE.settings.githubToken = document.getElementById("ghToken").value.trim();
+  STATE.settings.githubOwner = owner||"";
+  STATE.settings.githubRepo = repo||"";
+  STATE.settings.githubPath = document.getElementById("ghPath").value.trim() || "data/electricity-data.json";
+  STATE.settings.githubBranch = document.getElementById("ghBranch").value.trim() || "main";
+  await putItem("settings", STATE.settings);
+  toast("GitHub settings saved","ok");
+});
+
+function allDataPayload(){
+  return {
+    exportedAt: new Date().toISOString(),
+    panchayatName: STATE.settings.panchayatName,
+    connections: STATE.connections,
+    demands: STATE.demands,
+    buildingTypes: STATE.buildingTypes,
+    tariffTypes: STATE.tariffTypes,
+    constituencies: STATE.constituencies,
+    villages: STATE.villages
+  };
+}
+
+document.querySelector('[data-action="github-backup"]').addEventListener("click", async ()=>{
+  const s = STATE.settings;
+  const statusEl = document.getElementById("ghStatus");
+  if(!s.githubToken || !s.githubOwner || !s.githubRepo){ toast("Please fill and save GitHub settings first","err"); return; }
+  statusEl.textContent = "Backing up…";
+  try{
+    const apiUrl = `https://api.github.com/repos/${s.githubOwner}/${s.githubRepo}/contents/${encodeURI(s.githubPath)}`;
+    let sha = null;
+    const getResp = await fetch(apiUrl + `?ref=${encodeURIComponent(s.githubBranch)}`, {
+      headers:{ "Authorization":`token ${s.githubToken}`, "Accept":"application/vnd.github+json" }
+    });
+    if(getResp.status===200){ const j = await getResp.json(); sha = j.sha; }
+    const content = b64EncodeUnicode(JSON.stringify(allDataPayload(), null, 2));
+    const putResp = await fetch(apiUrl, {
+      method:"PUT",
+      headers:{ "Authorization":`token ${s.githubToken}`, "Accept":"application/vnd.github+json", "Content-Type":"application/json" },
+      body: JSON.stringify({
+        message: "Backup electricity data — " + new Date().toISOString(),
+        content, sha: sha||undefined, branch: s.githubBranch
+      })
+    });
+    if(!putResp.ok){ const err = await putResp.json().catch(()=>({})); throw new Error(err.message || putResp.statusText); }
+    statusEl.textContent = "✅ Backup successful — " + new Date().toLocaleString("en-IN");
+    toast("Backed up to GitHub","ok");
+  }catch(err){
+    statusEl.textContent = "❌ Backup failed: " + err.message;
+    toast("GitHub backup failed","err");
+  }
+});
+
+document.querySelector('[data-action="github-restore"]').addEventListener("click", async ()=>{
+  const s = STATE.settings;
+  const statusEl = document.getElementById("ghStatus");
+  if(!s.githubToken || !s.githubOwner || !s.githubRepo){ toast("Please fill and save GitHub settings first","err"); return; }
+  if(!confirm("Restoring will overwrite all local data with the GitHub backup. Continue?")) return;
+  statusEl.textContent = "Restoring…";
+  try{
+    const apiUrl = `https://api.github.com/repos/${s.githubOwner}/${s.githubRepo}/contents/${encodeURI(s.githubPath)}?ref=${encodeURIComponent(s.githubBranch)}`;
+    const resp = await fetch(apiUrl, { headers:{ "Authorization":`token ${s.githubToken}`, "Accept":"application/vnd.github+json" } });
+    if(!resp.ok) throw new Error("File not found or access denied ("+resp.status+")");
+    const j = await resp.json();
+    const text = b64DecodeUnicode(j.content.replace(/\n/g,""));
+    const data = JSON.parse(text);
+    await importDataObject(data);
+    statusEl.textContent = "✅ Restored from GitHub — " + new Date().toLocaleString("en-IN");
+    toast("Data restored from GitHub","ok");
+  }catch(err){
+    statusEl.textContent = "❌ Restore failed: " + err.message;
+    toast("GitHub restore failed","err");
+  }
+});
+
+/* ---- Google Sheets sync ---- */
+document.querySelector('[data-action="save-gsheet-settings"]').addEventListener("click", async ()=>{
+  STATE.settings.gsheetUrl = document.getElementById("gsheetUrl").value.trim();
+  await putItem("settings", STATE.settings);
+  toast("Google Sheets URL saved","ok");
+});
+document.querySelector('[data-action="gsheet-sync"]').addEventListener("click", async ()=>{
+  const url = STATE.settings.gsheetUrl;
+  const statusEl = document.getElementById("gsheetStatus");
+  if(!url){ toast("Please save an Apps Script Web App URL first","err"); return; }
+  statusEl.textContent = "Syncing…";
+  try{
+    await fetch(url, {
+      method:"POST",
+      mode:"no-cors",
+      headers:{ "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify(allDataPayload())
+    });
+    // no-cors gives an opaque response, so we can't verify status — assume sent
+    statusEl.textContent = "Sync request sent at " + new Date().toLocaleString("en-IN") + ". Check your Google Sheet to confirm receipt.";
+    toast("Sync request sent to Google Sheets","ok");
+  }catch(err){
+    statusEl.textContent = "❌ Sync failed: " + err.message;
+    toast("Google Sheets sync failed","err");
+  }
+});
+
+/* ---- Local JSON export/import/wipe ---- */
+document.querySelector('[data-action="export-json"]').addEventListener("click", ()=>{
+  const blob = new Blob([JSON.stringify(allDataPayload(), null, 2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "ariankuppam-electricity-data-"+new Date().toISOString().slice(0,10)+".json"; a.click();
+  toast("Data exported","ok");
+});
+document.querySelector('[data-action="import-json"]').addEventListener("click", ()=>{
+  document.getElementById("importFileInput").click();
+});
+document.getElementById("importFileInput").addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(!confirm("Importing will overwrite all local data with the contents of this file. Continue?")) return;
+    await importDataObject(data);
+    toast("Data imported successfully","ok");
+  }catch(err){
+    toast("Import failed: "+err.message,"err");
+  }
+  e.target.value = "";
+});
+document.querySelector('[data-action="wipe-data"]').addEventListener("click", async ()=>{
+  if(!confirm("This will permanently erase ALL local data (connections, demand records, custom lists). This cannot be undone. Continue?")) return;
+  if(!confirm("Are you absolutely sure? Consider exporting a backup first.")) return;
+  await clearStore("connections"); await clearStore("demands");
+  await clearStore("buildingTypes"); await clearStore("tariffTypes");
+  await clearStore("constituencies"); await clearStore("villages");
+  STATE.connections = []; STATE.demands = []; STATE.constituencies = []; STATE.villages = [];
+  await seedDefaultTypes();
+  toast("All local data erased","ok");
+  showView("dashboard");
+});
+
+async function importDataObject(data){
+  await clearStore("connections"); await clearStore("demands");
+  await clearStore("buildingTypes"); await clearStore("tariffTypes");
+  await clearStore("constituencies"); await clearStore("villages");
+  STATE.connections = data.connections||[];
+  STATE.demands = data.demands||[];
+  STATE.buildingTypes = data.buildingTypes||[];
+  STATE.tariffTypes = data.tariffTypes||[];
+  STATE.constituencies = data.constituencies||[];
+  STATE.villages = data.villages||[];
+  // If an older backup didn't include managed constituency/village lists, derive them from existing connection data
+  if(!STATE.constituencies.length){
+    STATE.constituencies = [...new Set(STATE.connections.map(c=>c.constituency).filter(Boolean))].map(name=>({id:uid(), name}));
+  }
+  if(!STATE.villages.length){
+    STATE.villages = [...new Set(STATE.connections.map(c=>c.village).filter(Boolean))].map(name=>({id:uid(), name}));
+  }
+  for(const c of STATE.connections) await putItem("connections", c);
+  for(const d of STATE.demands) await putItem("demands", d);
+  for(const t of STATE.buildingTypes) await putItem("buildingTypes", t);
+  for(const t of STATE.tariffTypes) await putItem("tariffTypes", t);
+  for(const t of STATE.constituencies) await putItem("constituencies", t);
+  for(const t of STATE.villages) await putItem("villages", t);
+  if(data.panchayatName){ STATE.settings.panchayatName = data.panchayatName; await putItem("settings", STATE.settings); }
+  if(!STATE.buildingTypes.length || !STATE.tariffTypes.length) await seedDefaultTypes();
+  showView(currentView);
+}
+
+/* =========================================================
+   Modal close on ESC / backdrop, generic wiring
+   ========================================================= */
+document.addEventListener("keydown",(e)=>{
+  if(e.key==="Escape"){
+    document.querySelectorAll(".modal-overlay.active").forEach(o=>o.classList.remove("active"));
+  }
+});
+
+/* =========================================================
+   Seed defaults & boot
+   ========================================================= */
+async function seedDefaultTypes(){
+  if(!STATE.buildingTypes.length){
+    for(const name of DEFAULT_BUILDING_TYPES){
+      const item = {id:uid(), name};
+      await putItem("buildingTypes", item);
+      STATE.buildingTypes.push(item);
+    }
+  }
+  if(!STATE.tariffTypes.length){
+    for(const name of DEFAULT_TARIFF_TYPES){
+      const item = {id:uid(), name};
+      await putItem("tariffTypes", item);
+      STATE.tariffTypes.push(item);
+    }
+  }
+}
+
+async function boot(){
+  try{
+    await openDB();
+    const [conns, demands, bTypes, tTypes, constituencies, villages, settingsArr] = await Promise.all([
+      getAll("connections"), getAll("demands"), getAll("buildingTypes"), getAll("tariffTypes"),
+      getAll("constituencies"), getAll("villages"), getAll("settings")
+    ]);
+    STATE.connections = conns;
+    STATE.demands = demands;
+    STATE.buildingTypes = bTypes;
+    STATE.tariffTypes = tTypes;
+    STATE.constituencies = constituencies;
+    STATE.villages = villages;
+    if(settingsArr.length) STATE.settings = Object.assign(STATE.settings, settingsArr[0]);
+    await seedDefaultTypes();
+    // First time these lists exist (e.g. upgrading from an older version of this app): seed them
+    // from whatever constituency/village text already appears in existing connections.
+    if(!STATE.constituencies.length && STATE.connections.length){
+      const names = [...new Set(STATE.connections.map(c=>c.constituency).filter(Boolean))];
+      for(const name of names){ const item={id:uid(),name}; await putItem("constituencies", item); STATE.constituencies.push(item); }
+    }
+    if(!STATE.villages.length && STATE.connections.length){
+      const names = [...new Set(STATE.connections.map(c=>c.village).filter(Boolean))];
+      for(const name of names){ const item={id:uid(),name}; await putItem("villages", item); STATE.villages.push(item); }
+    }
+    document.getElementById("storageStatus").textContent = "Local storage ready · "+STATE.connections.length+" connections";
+    showView("dashboard");
+  }catch(err){
+    console.error(err);
+    document.getElementById("storageStatus").textContent = "Storage error";
+    toast("Failed to initialize local database: "+err.message,"err");
+  }
+}
+window.addEventListener("libsready", ()=>{
+  try{
+    if(currentView==="dashboard") renderDashboard();
+    if(currentView==="map") renderMapView();
+  }catch(e){ /* ignore — guarded renders already handle missing libs */ }
+});
+
+boot();
+
+})();
+
+</script>
+</body>
+</html>
