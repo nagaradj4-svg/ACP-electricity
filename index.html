@@ -770,6 +770,7 @@ function chartsAvailable(){
    Dashboard and the Reports view so "filter demand wise" behaves consistently everywhere. */
 function applyConnectionAndDemandFilters(cf, df){
   let conns = STATE.connections.filter(c=>{
+    if(cf.search && !((c.consumerNo||"").toLowerCase().includes(cf.search) || (c.consumerName||"").toLowerCase().includes(cf.search))) return false;
     if(cf.division && c.division!==cf.division) return false;
     if(cf.constituency && c.constituency!==cf.constituency) return false;
     if(cf.village && c.village!==cf.village) return false;
@@ -800,6 +801,7 @@ function renderDashFilters(){
   const villages = uniqueValues(STATE.connections,"village");
   const years = [...new Set(STATE.demands.map(d=>d.year))].sort((a,b)=>b-a);
   wrap.innerHTML = `
+    <input type="search" id="dh_search" placeholder="Consumer No / Name…">
     <select id="dh_division"><option value="">All Divisions</option>${divisions.map(d=>`<option>${d}</option>`).join("")}</select>
     <select id="dh_constituency"><option value="">All Constituencies</option>${constituencies.map(d=>`<option>${d}</option>`).join("")}</select>
     <select id="dh_village"><option value="">All Villages</option>${villages.map(d=>`<option>${d}</option>`).join("")}</select>
@@ -810,12 +812,13 @@ function renderDashFilters(){
     <select id="dh_demandYear"><option value="">Any Year</option>${years.map(y=>`<option>${y}</option>`).join("")}</select>
     <button class="btn btn-sm" id="dh_clear">Clear</button>
   `;
-  wrap.querySelectorAll("select").forEach(el=> el.addEventListener("input", renderDashboard));
+  wrap.querySelectorAll("input,select").forEach(el=> el.addEventListener("input", renderDashboard));
   wrap.querySelector("#dh_clear").addEventListener("click", ()=>{ renderDashFilters(); renderDashboard(); });
 }
 function getDashFilterValues(){
   return {
     conn: {
+      search: (document.getElementById("dh_search")?.value||"").toLowerCase(),
       division: document.getElementById("dh_division")?.value||"",
       constituency: document.getElementById("dh_constituency")?.value||"",
       village: document.getElementById("dh_village")?.value||"",
@@ -1297,13 +1300,14 @@ function renderReportFilters(){
   const constituencies = uniqueValues(STATE.connections,"constituency");
   const villages = uniqueValues(STATE.connections,"village");
   wrap.innerHTML = `
+    <input type="search" id="r_search" placeholder="Consumer No / Name…">
     <select id="r_division"><option value="">All Divisions</option>${divisions.map(d=>`<option>${d}</option>`).join("")}</select>
     <select id="r_constituency"><option value="">All Constituencies</option>${constituencies.map(d=>`<option>${d}</option>`).join("")}</select>
     <select id="r_village"><option value="">All Villages</option>${villages.map(d=>`<option>${d}</option>`).join("")}</select>
     <select id="r_buildingType"><option value="">All Building Types</option>${STATE.buildingTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
     <select id="r_tariffType"><option value="">All Tariff Types</option>${STATE.tariffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
   `;
-  wrap.querySelectorAll("select").forEach(el=>el.addEventListener("input", ()=>{ renderReportTable(); renderReportDemandTable(); }));
+  wrap.querySelectorAll("input,select").forEach(el=>el.addEventListener("input", ()=>{ renderReportTable(); renderReportDemandTable(); }));
 }
 function renderReportDemandFilters(){
   const wrap = document.getElementById("reportDemandFilters");
@@ -1320,6 +1324,7 @@ function renderReportDemandFilters(){
 }
 function getReportConnFilterValues(){
   return {
+    search: (document.getElementById("r_search")?.value||"").toLowerCase(),
     division: document.getElementById("r_division")?.value||"",
     constituency: document.getElementById("r_constituency")?.value||"",
     village: document.getElementById("r_village")?.value||"",
@@ -1456,15 +1461,25 @@ document.querySelector('[data-action="export-demand-csv"]').addEventListener("cl
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Ariankuppam_Electricity_Demand.csv"; a.click();
   toast("Demand CSV file downloaded","ok");
 });
+/* Estimate a landscape page height (mm) tall enough to hold every row of a table on
+   a single page, so long connection/demand lists don't spill onto extra PDF pages. */
+function calcPdfPageHeight(rowCount){
+  const rowH = 6.5;   // approx mm per table row at 8pt font with default cell padding
+  const topArea = 35; // space used by title + subtitle + section heading above the table
+  const bottomMargin = 12;
+  const h = topArea + Math.max(rowCount,1)*rowH + bottomMargin;
+  return Math.max(210, Math.ceil(h)); // never smaller than standard A4 landscape height
+}
 document.querySelector('[data-action="export-pdf"]').addEventListener("click", ()=>{
   if(typeof window.jspdf === "undefined"){ toast("PDF library failed to load — check your internet connection and reload","err"); return; }
   const connRows = reportRows();
   const demandRows = reportDemandRows();
   if(!connRows.length && !demandRows.length){ toast("No data to export","err"); return; }
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({orientation:"landscape"});
   const title = STATE.settings.panchayatName || "Ariankuppam Commune Panchayat";
   const genLine = "Electricity Service Connection & Demand Report — Generated " + new Date().toLocaleDateString("en-IN");
+  const firstCount = connRows.length ? connRows.length : demandRows.length;
+  const doc = new jsPDF({orientation:"landscape", unit:"mm", format:[297, calcPdfPageHeight(firstCount)]});
 
   if(connRows.length){
     doc.setFontSize(14); doc.text(title, 14, 14);
@@ -1479,11 +1494,12 @@ document.querySelector('[data-action="export-pdf"]').addEventListener("click", (
           buildingTypeName(c.buildingType), tariffTypeName(c.tariffType), c.sanctionedLoad||"",
           ld? fmtMonth(ld.month,ld.year)+" - "+fmtMoney(ld.demandAmount):"—", ld?ld.status:"—"];
       }),
-      styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]}
+      styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]},
+      pageBreak:"avoid", rowPageBreak:"avoid", margin:{top:31, bottom:8}
     });
   }
   if(demandRows.length){
-    if(connRows.length) doc.addPage();
+    if(connRows.length) doc.addPage([297, calcPdfPageHeight(demandRows.length)], "landscape");
     doc.setFontSize(14); doc.text(title, 14, 14);
     doc.setFontSize(10); doc.text(genLine, 14, 20);
     doc.setFontSize(11); doc.text("Demand Records ("+demandRows.length+")", 14, 27);
@@ -1495,7 +1511,8 @@ document.querySelector('[data-action="export-pdf"]').addEventListener("click", (
         return [c.consumerNo||"", c.consumerName||"", fmtMonth(d.month,d.year), d.unitsConsumed||"",
           fmtMoney(d.demandAmount), d.status||"", d.paidAmount?fmtMoney(d.paidAmount):"—", d.dueDate||"—"];
       }),
-      styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]}
+      styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]},
+      pageBreak:"avoid", rowPageBreak:"avoid", margin:{top:31, bottom:8}
     });
   }
   doc.save("Ariankuppam_Electricity_Report.pdf");
