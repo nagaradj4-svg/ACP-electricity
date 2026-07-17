@@ -246,6 +246,7 @@ tbody tr:hover{background:#FAFBFD;}
           <div><h2>Dashboard</h2><p>Overview of electricity service connections and demand status</p></div>
           <button class="btn btn-accent" data-action="new-connection">+ New Connection</button>
         </div>
+        <div class="card filters-bar" id="dashFilters"></div>
         <div class="grid stat-cards" id="statCards"></div>
         <div class="grid charts-grid">
           <div class="card chart-box"><h3>Connections by Tariff Type</h3><canvas id="chartTariff"></canvas></div>
@@ -307,11 +308,13 @@ tbody tr:hover{background:#FAFBFD;}
           <div><h2>Reports &amp; Export</h2><p>Generate filtered reports and export to Excel / PDF</p></div>
         </div>
         <div class="card filters-bar" id="reportFilters"></div>
+        <div class="card filters-bar" id="reportDemandFilters" style="margin-top:-6px;"></div>
         <div class="card" style="padding:16px 18px;margin-bottom:16px;">
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button class="btn btn-primary" data-action="export-excel">⬇ Export Excel</button>
-            <button class="btn btn-primary" data-action="export-csv">⬇ Export CSV</button>
-            <button class="btn btn-primary" data-action="export-pdf">⬇ Export PDF Report</button>
+            <button class="btn btn-primary" data-action="export-excel">⬇ Export Excel (Connections + Demand)</button>
+            <button class="btn btn-primary" data-action="export-csv">⬇ Export CSV (Connections)</button>
+            <button class="btn btn-primary" data-action="export-demand-csv">⬇ Export CSV (Demand)</button>
+            <button class="btn btn-primary" data-action="export-pdf">⬇ Export PDF (Full Report)</button>
             <button class="btn btn-primary" data-action="export-kml">⬇ Export KML (Geo)</button>
             <button class="btn" data-action="print-report">🖨 Print</button>
           </div>
@@ -324,8 +327,8 @@ tbody tr:hover{background:#FAFBFD;}
             <div id="importExcelStatus" style="margin-top:8px;font-size:12px;color:var(--ink-soft);"></div>
           </div>
         </div>
-        <div class="card" style="padding:16px 18px;">
-          <h3 style="font-size:14px;margin-bottom:10px;">Report Preview — <span id="reportSummaryLine"></span></h3>
+        <div class="card" style="padding:16px 18px;margin-bottom:16px;">
+          <h3 style="font-size:14px;margin-bottom:10px;">Connections Preview — <span id="reportSummaryLine"></span></h3>
           <div class="table-wrap">
             <table id="reportTable">
               <thead><tr>
@@ -333,6 +336,18 @@ tbody tr:hover{background:#FAFBFD;}
                 <th>Building</th><th>Tariff</th><th>Load</th><th>Last Demand</th><th>Last Status</th>
               </tr></thead>
               <tbody id="reportTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="padding:16px 18px;">
+          <h3 style="font-size:14px;margin-bottom:10px;">Demand Records Preview — <span id="reportDemandSummaryLine"></span></h3>
+          <div class="table-wrap">
+            <table id="reportDemandTable">
+              <thead><tr>
+                <th>Consumer No</th><th>Name</th><th>Month</th><th>Units</th><th>Demand Amount</th>
+                <th>Status</th><th>Paid Amount</th><th>Due Date</th>
+              </tr></thead>
+              <tbody id="reportDemandTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -749,24 +764,95 @@ function chartsAvailable(){
   if(typeof Chart === "undefined"){ return false; }
   return true;
 }
+
+/* Generic helper: given connection-level filters and demand-level filters, return the
+   matching connection list plus the demand records relevant to them. Used by both the
+   Dashboard and the Reports view so "filter demand wise" behaves consistently everywhere. */
+function applyConnectionAndDemandFilters(cf, df){
+  let conns = STATE.connections.filter(c=>{
+    if(cf.division && c.division!==cf.division) return false;
+    if(cf.constituency && c.constituency!==cf.constituency) return false;
+    if(cf.village && c.village!==cf.village) return false;
+    if(cf.buildingType && c.buildingType!==cf.buildingType) return false;
+    if(cf.tariffType && c.tariffType!==cf.tariffType) return false;
+    return true;
+  });
+  const hasDemandFilter = !!(df && (df.status || df.month || df.year));
+  let matchingDemands = STATE.demands.filter(d=>{
+    if(df && df.status && d.status!==df.status) return false;
+    if(df && df.month && String(d.month)!==df.month) return false;
+    if(df && df.year && String(d.year)!==df.year) return false;
+    return true;
+  });
+  if(hasDemandFilter){
+    const ids = new Set(matchingDemands.map(d=>d.connectionId));
+    conns = conns.filter(c=>ids.has(c.id));
+  }
+  const connIds = new Set(conns.map(c=>c.id));
+  const relevantDemands = (hasDemandFilter ? matchingDemands : STATE.demands).filter(d=>connIds.has(d.connectionId));
+  return { connections: conns, demands: relevantDemands, hasDemandFilter };
+}
+
+function renderDashFilters(){
+  const wrap = document.getElementById("dashFilters");
+  const divisions = uniqueValues(STATE.connections,"division");
+  const constituencies = uniqueValues(STATE.connections,"constituency");
+  const villages = uniqueValues(STATE.connections,"village");
+  const years = [...new Set(STATE.demands.map(d=>d.year))].sort((a,b)=>b-a);
+  wrap.innerHTML = `
+    <select id="dh_division"><option value="">All Divisions</option>${divisions.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="dh_constituency"><option value="">All Constituencies</option>${constituencies.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="dh_village"><option value="">All Villages</option>${villages.map(d=>`<option>${d}</option>`).join("")}</select>
+    <select id="dh_buildingType"><option value="">All Building Types</option>${STATE.buildingTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
+    <select id="dh_tariffType"><option value="">All Tariff Types</option>${STATE.tariffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
+    <select id="dh_demandStatus"><option value="">Any Demand Status</option><option>Paid</option><option>Unpaid</option><option>Partial</option></select>
+    <select id="dh_demandMonth"><option value="">Any Month</option>${MONTH_NAMES.map((m,i)=> i? `<option value="${i}">${m}</option>`:"").join("")}</select>
+    <select id="dh_demandYear"><option value="">Any Year</option>${years.map(y=>`<option>${y}</option>`).join("")}</select>
+    <button class="btn btn-sm" id="dh_clear">Clear</button>
+  `;
+  wrap.querySelectorAll("select").forEach(el=> el.addEventListener("input", renderDashboard));
+  wrap.querySelector("#dh_clear").addEventListener("click", ()=>{ renderDashFilters(); renderDashboard(); });
+}
+function getDashFilterValues(){
+  return {
+    conn: {
+      division: document.getElementById("dh_division")?.value||"",
+      constituency: document.getElementById("dh_constituency")?.value||"",
+      village: document.getElementById("dh_village")?.value||"",
+      buildingType: document.getElementById("dh_buildingType")?.value||"",
+      tariffType: document.getElementById("dh_tariffType")?.value||""
+    },
+    demand: {
+      status: document.getElementById("dh_demandStatus")?.value||"",
+      month: document.getElementById("dh_demandMonth")?.value||"",
+      year: document.getElementById("dh_demandYear")?.value||""
+    }
+  };
+}
+
 function renderDashboard(){
-  const conns = STATE.connections;
+  if(!document.getElementById("dashFilters").innerHTML.trim()) renderDashFilters();
+  const f = getDashFilterValues();
+  const { connections: conns, demands: relevantDemands, hasDemandFilter } = applyConnectionAndDemandFilters(f.conn, f.demand);
+
   const totalLoad = conns.reduce((s,c)=>s+(Number(c.sanctionedLoad)||0),0);
   const now = new Date();
-  const curMonth = now.getMonth()+1, curYear = now.getFullYear();
-  const thisMonthDemand = STATE.demands.filter(d=>d.month===curMonth && d.year===curYear);
-  const thisMonthTotal = thisMonthDemand.reduce((s,d)=>s+(Number(d.demandAmount)||0),0);
-  const overdue = STATE.demands.filter(d=>{
+  const curMonth = f.demand.month ? parseInt(f.demand.month,10) : now.getMonth()+1;
+  const curYear = f.demand.year ? parseInt(f.demand.year,10) : now.getFullYear();
+  const periodDemand = relevantDemands.filter(d=>d.month===curMonth && d.year===curYear);
+  const periodTotal = periodDemand.reduce((s,d)=>s+(Number(d.demandAmount)||0),0);
+  const overdue = relevantDemands.filter(d=>{
     if(d.status==="Paid") return false;
     if(!d.dueDate) return false;
     return new Date(d.dueDate) < now;
   });
   const geoTagged = conns.filter(c=>c.lat && c.lng).length;
+  const periodLabel = (f.demand.month || f.demand.year) ? MONTH_NAMES[curMonth]+" "+curYear+" Demand" : "This Month's Demand ("+MONTH_NAMES[curMonth]+")";
 
   const cards = [
-    {lbl:"Total Connections", val:conns.length, cls:""},
+    {lbl: hasDemandFilter ? "Matching Connections" : "Total Connections", val:conns.length, cls:""},
     {lbl:"Total Sanctioned Load", val:totalLoad.toFixed(2), unit:"kW/HP", cls:""},
-    {lbl:"This Month's Demand ("+MONTH_NAMES[curMonth]+")", val:fmtMoney(thisMonthTotal), cls:"good"},
+    {lbl:periodLabel, val:fmtMoney(periodTotal), cls:"good"},
     {lbl:"Overdue Bills", val:overdue.length, cls: overdue.length>0 ? "alert":"good"},
     {lbl:"Geo-tagged Assets", val:geoTagged+" / "+conns.length, cls:""}
   ];
@@ -776,49 +862,49 @@ function renderDashboard(){
       <div class="val">${c.val}${c.unit?`<small>${c.unit}</small>`:""}</div>
     </div>`).join("");
 
-  renderTariffChart();
-  renderBuildingChart();
-  renderVillageChart();
-  renderTrendChart();
+  renderTariffChart(conns);
+  renderBuildingChart(conns);
+  renderVillageChart(conns);
+  renderTrendChart(conns, relevantDemands);
 }
 
 function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
 
-function renderTariffChart(){
+function renderTariffChart(conns){
   if(!chartsAvailable()) return;
   destroyChart("tariff");
   const ctx = document.getElementById("chartTariff");
   const counts = {};
-  STATE.connections.forEach(c=>{ const n = tariffTypeName(c.tariffType); counts[n]=(counts[n]||0)+1; });
+  conns.forEach(c=>{ const n = tariffTypeName(c.tariffType); counts[n]=(counts[n]||0)+1; });
   const labels = Object.keys(counts);
   if(!labels.length){ ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
   charts.tariff = new Chart(ctx, { type:"doughnut", data:{ labels, datasets:[{ data:labels.map(l=>counts[l]),
     backgroundColor:["#F2A93B","#152238","#158C79","#D14343","#8892A6","#223460","#C97F12"] }]},
     options:{ plugins:{legend:{position:"bottom", labels:{boxWidth:10,font:{size:11}}}} } });
 }
-function renderBuildingChart(){
+function renderBuildingChart(conns){
   if(!chartsAvailable()) return;
   destroyChart("building");
   const ctx = document.getElementById("chartBuilding");
   const counts = {};
-  STATE.connections.forEach(c=>{ const n = buildingTypeName(c.buildingType); counts[n]=(counts[n]||0)+1; });
+  conns.forEach(c=>{ const n = buildingTypeName(c.buildingType); counts[n]=(counts[n]||0)+1; });
   const labels = Object.keys(counts);
   if(!labels.length){ ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
   charts.building = new Chart(ctx, { type:"bar", data:{ labels, datasets:[{ label:"Connections", data:labels.map(l=>counts[l]), backgroundColor:"#152238", borderRadius:5 }]},
     options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0}} } } });
 }
-function renderVillageChart(){
+function renderVillageChart(conns){
   if(!chartsAvailable()) return;
   destroyChart("village");
   const ctx = document.getElementById("chartVillage");
   const counts = {};
-  STATE.connections.forEach(c=>{ const n = c.village||"Unspecified"; counts[n]=(counts[n]||0)+1; });
+  conns.forEach(c=>{ const n = c.village||"Unspecified"; counts[n]=(counts[n]||0)+1; });
   const labels = Object.keys(counts);
   if(!labels.length){ ctx.getContext("2d").clearRect(0,0,ctx.width,ctx.height); return; }
   charts.village = new Chart(ctx, { type:"bar", data:{ labels, datasets:[{ label:"Connections", data:labels.map(l=>counts[l]), backgroundColor:"#F2A93B", borderRadius:5 }]},
     options:{ indexAxis:"y", plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true, ticks:{precision:0}} } } });
 }
-function renderTrendChart(){
+function renderTrendChart(conns, demandsScope){
   if(!chartsAvailable()) return;
   destroyChart("trend");
   const ctx = document.getElementById("chartTrend");
@@ -828,7 +914,8 @@ function renderTrendChart(){
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     buckets.push({month:d.getMonth()+1, year:d.getFullYear(), label: MONTH_NAMES[d.getMonth()+1].slice(0,3)+" "+String(d.getFullYear()).slice(2)});
   }
-  const totals = buckets.map(b=> STATE.demands.filter(d=>d.month===b.month && d.year===b.year).reduce((s,d)=>s+(Number(d.demandAmount)||0),0));
+  const source = demandsScope || STATE.demands;
+  const totals = buckets.map(b=> source.filter(d=>d.month===b.month && d.year===b.year).reduce((s,d)=>s+(Number(d.demandAmount)||0),0));
   charts.trend = new Chart(ctx, { type:"line", data:{ labels: buckets.map(b=>b.label), datasets:[{ label:"Total Demand (₹)", data: totals,
     borderColor:"#158C79", backgroundColor:"rgba(21,140,121,.12)", fill:true, tension:.3, pointRadius:3 }]},
     options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true} } } });
@@ -1216,26 +1303,48 @@ function renderReportFilters(){
     <select id="r_buildingType"><option value="">All Building Types</option>${STATE.buildingTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
     <select id="r_tariffType"><option value="">All Tariff Types</option>${STATE.tariffTypes.map(t=>`<option value="${t.id}">${t.name}</option>`).join("")}</select>
   `;
-  wrap.querySelectorAll("select").forEach(el=>el.addEventListener("input", renderReportTable));
+  wrap.querySelectorAll("select").forEach(el=>el.addEventListener("input", ()=>{ renderReportTable(); renderReportDemandTable(); }));
 }
-function reportRows(){
-  const division = document.getElementById("r_division")?.value||"";
-  const constituency = document.getElementById("r_constituency")?.value||"";
-  const village = document.getElementById("r_village")?.value||"";
-  const buildingType = document.getElementById("r_buildingType")?.value||"";
-  const tariffType = document.getElementById("r_tariffType")?.value||"";
-  return STATE.connections.filter(c=>{
-    if(division && c.division!==division) return false;
-    if(constituency && c.constituency!==constituency) return false;
-    if(village && c.village!==village) return false;
-    if(buildingType && c.buildingType!==buildingType) return false;
-    if(tariffType && c.tariffType!==tariffType) return false;
-    return true;
-  });
+function renderReportDemandFilters(){
+  const wrap = document.getElementById("reportDemandFilters");
+  const years = [...new Set(STATE.demands.map(d=>d.year))].sort((a,b)=>b-a);
+  wrap.innerHTML = `
+    <span style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;align-self:center;">Filter demand-wise:</span>
+    <select id="rd_status"><option value="">Any Status</option><option>Paid</option><option>Unpaid</option><option>Partial</option></select>
+    <select id="rd_month"><option value="">Any Month</option>${MONTH_NAMES.map((m,i)=> i? `<option value="${i}">${m}</option>`:"").join("")}</select>
+    <select id="rd_year"><option value="">Any Year</option>${years.map(y=>`<option>${y}</option>`).join("")}</select>
+    <button class="btn btn-sm" id="rd_clear">Clear</button>
+  `;
+  wrap.querySelectorAll("select").forEach(el=>el.addEventListener("input", ()=>{ renderReportTable(); renderReportDemandTable(); }));
+  wrap.querySelector("#rd_clear").addEventListener("click", ()=>{ renderReportDemandFilters(); renderReportTable(); renderReportDemandTable(); });
 }
+function getReportConnFilterValues(){
+  return {
+    division: document.getElementById("r_division")?.value||"",
+    constituency: document.getElementById("r_constituency")?.value||"",
+    village: document.getElementById("r_village")?.value||"",
+    buildingType: document.getElementById("r_buildingType")?.value||"",
+    tariffType: document.getElementById("r_tariffType")?.value||""
+  };
+}
+function getReportDemandFilterValues(){
+  return {
+    status: document.getElementById("rd_status")?.value||"",
+    month: document.getElementById("rd_month")?.value||"",
+    year: document.getElementById("rd_year")?.value||""
+  };
+}
+function reportScope(){
+  return applyConnectionAndDemandFilters(getReportConnFilterValues(), getReportDemandFilterValues());
+}
+function reportRows(){ return reportScope().connections; }
+function reportDemandRows(){ return reportScope().demands.slice().sort((a,b)=> (b.year-a.year)||(b.month-a.month)); }
+
 function renderReportsView(){
   renderReportFilters();
+  renderReportDemandFilters();
   renderReportTable();
+  renderReportDemandTable();
 }
 function renderReportTable(){
   const rows = reportRows();
@@ -1261,6 +1370,29 @@ function renderReportTable(){
     </tr>`;
   }).join("");
 }
+function renderReportDemandTable(){
+  const rows = reportDemandRows();
+  document.getElementById("reportDemandSummaryLine").textContent = `${rows.length} demand record(s)`;
+  const body = document.getElementById("reportDemandTableBody");
+  if(!rows.length){
+    body.innerHTML = `<tr><td colspan="8"><div class="empty">No matching demand records.</div></td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(d=>{
+    const c = connectionById(d.connectionId) || {};
+    const badgeClass = d.status==="Paid"?"paid":(d.status==="Partial"?"partial":"unpaid");
+    return `<tr>
+      <td class="mono">${c.consumerNo||"—"}</td>
+      <td>${c.consumerName||"—"}</td>
+      <td>${fmtMonth(d.month, d.year)}</td>
+      <td class="mono">${d.unitsConsumed||""}</td>
+      <td class="mono">${fmtMoney(d.demandAmount)}</td>
+      <td><span class="badge ${badgeClass}">${d.status}</span></td>
+      <td class="mono">${d.paidAmount?fmtMoney(d.paidAmount):"—"}</td>
+      <td>${d.dueDate||"—"}</td>
+    </tr>`;
+  }).join("");
+}
 
 function reportDataForExport(){
   return reportRows().map(c=>{
@@ -1280,16 +1412,29 @@ function reportDataForExport(){
     };
   });
 }
+function reportDemandDataForExport(){
+  return reportDemandRows().map(d=>{
+    const c = connectionById(d.connectionId) || {};
+    return {
+      "Consumer No": c.consumerNo||"", "Consumer Name": c.consumerName||"",
+      "Division": c.division||"", "Constituency": c.constituency||"", "Village": c.village||"",
+      "Month": fmtMonth(d.month, d.year), "Units Consumed": d.unitsConsumed||"",
+      "Demand Amount": d.demandAmount||"", "Status": d.status||"",
+      "Paid Amount": d.paidAmount||"", "Due Date": d.dueDate||"", "Remarks": d.remarks||""
+    };
+  });
+}
 
 document.querySelector('[data-action="export-excel"]').addEventListener("click", ()=>{
   if(typeof XLSX === "undefined"){ toast("Excel library failed to load — check your internet connection and reload","err"); return; }
-  const data = reportDataForExport();
-  if(!data.length){ toast("No data to export","err"); return; }
-  const ws = XLSX.utils.json_to_sheet(data);
+  const connData = reportDataForExport();
+  const demandData = reportDemandDataForExport();
+  if(!connData.length && !demandData.length){ toast("No data to export","err"); return; }
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Connections Report");
+  if(connData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(connData), "Connections");
+  if(demandData.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(demandData), "Demand Records");
   XLSX.writeFile(wb, "Ariankuppam_Electricity_Report.xlsx");
-  toast("Excel file downloaded","ok");
+  toast("Excel file downloaded (Connections + Demand Records)","ok");
 });
 document.querySelector('[data-action="export-csv"]').addEventListener("click", ()=>{
   if(typeof XLSX === "undefined"){ toast("Excel library failed to load — check your internet connection and reload","err"); return; }
@@ -1298,32 +1443,63 @@ document.querySelector('[data-action="export-csv"]').addEventListener("click", (
   const ws = XLSX.utils.json_to_sheet(data);
   const csv = XLSX.utils.sheet_to_csv(ws);
   const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Ariankuppam_Electricity_Report.csv"; a.click();
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Ariankuppam_Electricity_Connections.csv"; a.click();
   toast("CSV file downloaded","ok");
+});
+document.querySelector('[data-action="export-demand-csv"]').addEventListener("click", ()=>{
+  if(typeof XLSX === "undefined"){ toast("Excel library failed to load — check your internet connection and reload","err"); return; }
+  const data = reportDemandDataForExport();
+  if(!data.length){ toast("No demand records to export","err"); return; }
+  const ws = XLSX.utils.json_to_sheet(data);
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Ariankuppam_Electricity_Demand.csv"; a.click();
+  toast("Demand CSV file downloaded","ok");
 });
 document.querySelector('[data-action="export-pdf"]').addEventListener("click", ()=>{
   if(typeof window.jspdf === "undefined"){ toast("PDF library failed to load — check your internet connection and reload","err"); return; }
-  const data = reportRows();
-  if(!data.length){ toast("No data to export","err"); return; }
+  const connRows = reportRows();
+  const demandRows = reportDemandRows();
+  if(!connRows.length && !demandRows.length){ toast("No data to export","err"); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:"landscape"});
-  doc.setFontSize(14);
-  doc.text(STATE.settings.panchayatName || "Ariankuppam Commune Panchayat", 14, 14);
-  doc.setFontSize(10);
-  doc.text("Electricity Service Connection & Demand Report — Generated " + new Date().toLocaleDateString("en-IN"), 14, 20);
-  doc.autoTable({
-    startY: 26,
-    head: [["Consumer No","Name","Division","Constituency","Village","Building","Tariff","Load","Last Demand","Status"]],
-    body: data.map(c=>{
-      const ld = latestDemand(c.id);
-      return [c.consumerNo||"", c.consumerName||"", c.division||"", c.constituency||"", c.village||"",
-        buildingTypeName(c.buildingType), tariffTypeName(c.tariffType), c.sanctionedLoad||"",
-        ld? fmtMonth(ld.month,ld.year)+" - "+fmtMoney(ld.demandAmount):"—", ld?ld.status:"—"];
-    }),
-    styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]}
-  });
+  const title = STATE.settings.panchayatName || "Ariankuppam Commune Panchayat";
+  const genLine = "Electricity Service Connection & Demand Report — Generated " + new Date().toLocaleDateString("en-IN");
+
+  if(connRows.length){
+    doc.setFontSize(14); doc.text(title, 14, 14);
+    doc.setFontSize(10); doc.text(genLine, 14, 20);
+    doc.setFontSize(11); doc.text("Connections ("+connRows.length+")", 14, 27);
+    doc.autoTable({
+      startY: 31,
+      head: [["Consumer No","Name","Division","Constituency","Village","Building","Tariff","Load","Last Demand","Status"]],
+      body: connRows.map(c=>{
+        const ld = latestDemand(c.id);
+        return [c.consumerNo||"", c.consumerName||"", c.division||"", c.constituency||"", c.village||"",
+          buildingTypeName(c.buildingType), tariffTypeName(c.tariffType), c.sanctionedLoad||"",
+          ld? fmtMonth(ld.month,ld.year)+" - "+fmtMoney(ld.demandAmount):"—", ld?ld.status:"—"];
+      }),
+      styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]}
+    });
+  }
+  if(demandRows.length){
+    if(connRows.length) doc.addPage();
+    doc.setFontSize(14); doc.text(title, 14, 14);
+    doc.setFontSize(10); doc.text(genLine, 14, 20);
+    doc.setFontSize(11); doc.text("Demand Records ("+demandRows.length+")", 14, 27);
+    doc.autoTable({
+      startY: 31,
+      head: [["Consumer No","Name","Month","Units","Demand Amount","Status","Paid Amount","Due Date"]],
+      body: demandRows.map(d=>{
+        const c = connectionById(d.connectionId) || {};
+        return [c.consumerNo||"", c.consumerName||"", fmtMonth(d.month,d.year), d.unitsConsumed||"",
+          fmtMoney(d.demandAmount), d.status||"", d.paidAmount?fmtMoney(d.paidAmount):"—", d.dueDate||"—"];
+      }),
+      styles:{fontSize:8}, headStyles:{fillColor:[21,34,56]}
+    });
+  }
   doc.save("Ariankuppam_Electricity_Report.pdf");
-  toast("PDF report downloaded","ok");
+  toast("PDF report downloaded (Connections + Demand Records)","ok");
 });
 document.querySelector('[data-action="print-report"]').addEventListener("click", ()=> window.print());
 
